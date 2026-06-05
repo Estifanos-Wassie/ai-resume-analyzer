@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Environment variables (secrets)
+.env
+
+# Mac junk
+.DS_Store
+
+# Node modules (frontend dependencies - huge folder)
+node_modules/
+
