@@ -1,10 +1,24 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from groq import Groq
+import fitz  # PyMuPDF
 import os
+import json
 
 load_dotenv()
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/")
 def home():
@@ -16,3 +30,76 @@ def health():
     if api_key:
         return {"status": "healthy", "api_key_loaded": True}
     return {"status": "unhealthy", "api_key_loaded": False}
+
+
+@app.post("/analyze")
+async def analyze_resume(
+    file: UploadFile = File(...),
+    job_description: str = Form(...)
+):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    pdf_bytes = await file.read()
+    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+    resume_text = ""
+    for page in pdf_doc:
+        resume_text += page.get_text()
+    pdf_doc.close()
+
+    if not resume_text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Could not extract text. The PDF may be a scanned image."
+        )
+
+    prompt = f"""You are an expert technical recruiter and career coach.
+Analyze the resume against the job description and return ONLY a JSON object.
+No markdown, no explanation — raw JSON only.
+
+Required format:
+{{
+  "match_score": <integer 0-100>,
+  "strengths": ["..."],
+  "missing_skills": ["..."],
+  "suggestions": ["..."]
+}}
+
+RESUME:
+{resume_text}
+
+JOB DESCRIPTION:
+{job_description}
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a resume analysis assistant. Always respond with valid JSON only."
+            },
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.3,
+        max_tokens=1024,
+    )
+
+    raw = response.choices[0].message.content.strip()
+
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Model returned non-JSON output: {raw[:300]}"
+        )
+
+    return result
