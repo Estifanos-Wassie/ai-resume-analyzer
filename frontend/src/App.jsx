@@ -3,10 +3,12 @@ import './App.css'
 
 function App() {
   const [file, setFile] = useState(null)
+  const [dragging, setDragging] = useState(false)
   const [jobDescription, setJobDescription] = useState("")
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [history, setHistory] = useState([])
 
   function getScoreClass(score) {
     if (score >= 75) return "score-good"
@@ -42,6 +44,7 @@ function App() {
 
       const data = await res.json()
       setResult(data)
+      setHistory(prev => [{ filename: file.name, ...data }, ...prev])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -57,14 +60,23 @@ function App() {
       </p>
 
       <form onSubmit={handleSubmit}>
-        <label className="file-drop">
+        <label
+          className={`file-drop ${dragging ? "dragging" : ""}`}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragging(false)
+            setFile(e.dataTransfer.files[0])
+          }}
+        >
           <input
             type="file"
             accept=".pdf"
             onChange={(e) => setFile(e.target.files[0])}
             hidden
           />
-          {file ? file.name : "Click to upload your resume (PDF)"}
+          {file ? file.name : "Click or drag a PDF here"}
         </label>
 
         <label>
@@ -118,6 +130,18 @@ function App() {
               {result.suggestions.map((s, i) => <li key={i}>{s}</li>)}
             </ul>
           </div>
+        </div>
+      )}
+
+      {history.length > 1 && (
+        <div className="history">
+          <h3>Previous Analyses</h3>
+          {history.slice(1).map((h, i) => (
+            <div key={i} className={`history-item ${getScoreClass(h.match_score)}`}>
+              <span className="history-filename">{h.filename}</span>
+              <span className="history-score">{h.match_score}%</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

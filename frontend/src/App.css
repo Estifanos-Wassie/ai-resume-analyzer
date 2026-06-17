@@ -53,7 +53,8 @@ form {
   transition: border-color 0.2s, background 0.2s;
 }
 
-.file-drop:hover {
+.file-drop:hover,
+.file-drop.dragging {
   border-color: var(--accent);
   background: var(--accent-bg);
 }
@@ -215,3 +216,45 @@ button[type="submit"]:disabled {
 .result-card li {
   margin-bottom: 4px;
 }
+
+.history {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  margin-top: 8px;
+}
+
+.history h3 {
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  margin-bottom: 8px;
+}
+
+.history-filename {
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 75%;
+}
+
+.history-score {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.history-item.score-good .history-score { color: #16a34a; }
+.history-item.score-mid .history-score  { color: #ca8a04; }
+.history-item.score-low .history-score  { color: #dc2626; }
