@@ -8,6 +8,12 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
+  function getScoreClass(score) {
+    if (score >= 75) return "score-good"
+    if (score >= 50) return "score-mid"
+    return "score-low"
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError("")
@@ -46,19 +52,23 @@ function App() {
   return (
     <div className="app">
       <h1>AI Resume Analyzer</h1>
+      <p className="subtitle">
+        Upload your resume and a job description to get instant AI feedback.
+      </p>
 
       <form onSubmit={handleSubmit}>
-        <label>
-          Resume (PDF)
+        <label className="file-drop">
           <input
             type="file"
             accept=".pdf"
             onChange={(e) => setFile(e.target.files[0])}
+            hidden
           />
+          {file ? file.name : "Click to upload your resume (PDF)"}
         </label>
 
         <label>
-          Job Description
+          <span className="field-label">Job Description</span>
           <textarea
             rows={8}
             value={jobDescription}
@@ -68,7 +78,14 @@ function App() {
         </label>
 
         <button type="submit" disabled={loading}>
-          {loading ? "Analyzing..." : "Analyze Resume"}
+          {loading ? (
+            <>
+              <span className="spinner" />
+              Analyzing...
+            </>
+          ) : (
+            "Analyze Resume"
+          )}
         </button>
       </form>
 
@@ -76,22 +93,31 @@ function App() {
 
       {result && (
         <div className="result">
-          <h2>Match Score: {result.match_score}%</h2>
+          <div className={`score-badge ${getScoreClass(result.match_score)}`}>
+            <span className="score-number">{result.match_score}%</span>
+            <span className="score-caption">Match Score</span>
+          </div>
 
-          <h3>Strengths</h3>
-          <ul>
-            {result.strengths.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
+          <div className="result-card">
+            <h3>Strengths</h3>
+            <ul>
+              {result.strengths.map((s, i) => <li key={i}>{s}</li>)}
+            </ul>
+          </div>
 
-          <h3>Missing Skills</h3>
-          <ul>
-            {result.missing_skills.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
+          <div className="result-card">
+            <h3>Missing Skills</h3>
+            <ul>
+              {result.missing_skills.map((s, i) => <li key={i}>{s}</li>)}
+            </ul>
+          </div>
 
-          <h3>Suggestions</h3>
-          <ul>
-            {result.suggestions.map((s, i) => <li key={i}>{s}</li>)}
-          </ul>
+          <div className="result-card">
+            <h3>Suggestions</h3>
+            <ul>
+              {result.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+            </ul>
+          </div>
         </div>
       )}
     </div>
