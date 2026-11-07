@@ -64,7 +64,7 @@ def extract_resume_text(content: bytes) -> str:
                     raise HTTPException(413, "Extracted resume text exceeds 50,000 characters.")
                 parts.append(text)
             resume_text = "".join(parts)
-    except (fitz.FileDataError, RuntimeError, ValueError):
+    except (fitz.FileDataError, fitz.mupdf.FzErrorBase, RuntimeError, ValueError):
         raise HTTPException(400, "Resume PDF is corrupt or unreadable. Upload a readable PDF.") from None
 
     if not resume_text.strip():
