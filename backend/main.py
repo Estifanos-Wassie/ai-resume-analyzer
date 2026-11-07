@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from groq import Groq
-import fitz  # PyMuPDF
+from input_validation import validate_inputs
 import os
 import json
 
@@ -37,22 +37,7 @@ async def analyze_resume(
     file: UploadFile = File(...),
     job_description: str = Form(...)
 ):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
-
-    pdf_bytes = await file.read()
-    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-
-    resume_text = ""
-    for page in pdf_doc:
-        resume_text += page.get_text()
-    pdf_doc.close()
-
-    if not resume_text.strip():
-        raise HTTPException(
-            status_code=422,
-            detail="Could not extract text. The PDF may be a scanned image."
-        )
+    resume_text, job_description = await validate_inputs(file, job_description)
 
     prompt = f"""You are an expert technical recruiter and career coach.
 Analyze the resume against the job description and return ONLY a JSON object.
