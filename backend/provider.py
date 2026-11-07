@@ -3,8 +3,18 @@
 import logging
 import os
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+import math
 
-from groq import AsyncGroq
+import anyio
+import httpx
+from fastapi import Request
+from groq import AsyncGroq, APIConnectionError, APIStatusError, APITimeoutError
+
+from config import Settings
+from operations import logger
 
 Provider = Callable[[str], Awaitable[str | None]]
 
@@ -17,13 +27,32 @@ class ProviderNotConfigured(Exception):
     pass
 
 
-async def generate_analysis(prompt: str) -> str | None:
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if not api_key:
-        raise ProviderNotConfigured()
+class GroqProvider:
+    """One lazy async client per application lifespan, shared across requests."""
 
-    async with AsyncGroq(api_key=api_key, timeout=30.0, max_retries=0) as client:
-        response = await client.chat.completions.create(
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self._client = None
+        self._closed = False
+
+    async def __call__(self, prompt: str) -> str | None:
+        if self._closed:
+            raise ProviderNotConfigured()
+        if self._client is None:
+            api_key = os.getenv("GROQ_API_KEY", "").strip()
+            if not api_key:
+                raise ProviderNotConfigured()
+            # No await before assignment: concurrent calls on this loop share one client.
+            self._client = AsyncGroq(
+                api_key=api_key,
+                timeout=httpx.Timeout(
+                    self.settings.provider_timeout_seconds,
+                    connect=min(5.0, self.settings.provider_timeout_seconds),
+                    pool=min(5.0, self.settings.provider_timeout_seconds),
+                ),
+                max_retries=0,
+            )
+        response = await self._client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {
@@ -37,6 +66,69 @@ async def generate_analysis(prompt: str) -> str | None:
         )
         return response.choices[0].message.content
 
+    async def close(self):
+        self._closed = True
+        client, self._client = self._client, None
+        if client is not None:
+            try:
+                # Shield shutdown cleanup from cancellation, but bound it independently.
+                with anyio.move_on_after(5.0, shield=True) as scope:
+                    await client.close()
+                if scope.cancel_called:
+                    logger.warning('{"event":"provider_cleanup","outcome":"timeout"}')
+            except Exception:
+                logger.warning('{"event":"provider_cleanup","outcome":"failed"}')
 
-def get_provider() -> Provider:
-    return generate_analysis
+
+@dataclass(frozen=True)
+class ProviderFailure:
+    status_code: int
+    detail: str
+    category: str
+    retry_after: str | None = None
+
+
+def safe_retry_after(value: str | None) -> str | None:
+    """Normalize delta seconds or an HTTP date; never reflect an arbitrary header."""
+    if not value or len(value) > 128:
+        return None
+    value = value.strip()
+    if value.isascii() and value.isdecimal() and len(value) <= 10:
+        return str(min(int(value), 3600))
+    try:
+        date = parsedate_to_datetime(value)
+        if date.tzinfo is None:
+            return None
+        seconds = math.ceil((date - datetime.now(timezone.utc)).total_seconds())
+        return str(max(0, min(seconds, 3600)))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def classify_failure(error: Exception) -> ProviderFailure:
+    if isinstance(error, ProviderNotConfigured):
+        return ProviderFailure(503, "Analysis is unavailable because the provider is not configured.", "missing_configuration")
+    if isinstance(error, (APITimeoutError, TimeoutError)):
+        return ProviderFailure(504, "Analysis service timed out. Try again later.", "timeout")
+    if isinstance(error, APIStatusError):
+        status = error.status_code
+        if status == 429:
+            return ProviderFailure(503, "Analysis service is temporarily unavailable due to provider rate limiting. Try again later.", "rate_limited", safe_retry_after(error.response.headers.get("retry-after")))
+        if status in (401, 403):
+            return ProviderFailure(503, "Analysis service is unavailable due to provider configuration.", "authentication")
+        body = error.body if isinstance(error.body, dict) else {}
+        detail = body.get("error", body)
+        code = detail.get("code") if isinstance(detail, dict) else None
+        if status == 404 or (isinstance(code, str) and code in {"model_not_found", "model_decommissioned", "model_not_available"}):
+            return ProviderFailure(503, "Analysis service is unavailable because the configured model is unavailable.", "model_unavailable")
+        if status == 408:
+            return ProviderFailure(504, "Analysis service timed out. Try again later.", "timeout")
+        category = "server_failure" if status >= 500 else "upstream_rejected"
+        return ProviderFailure(502, "Analysis provider could not complete the request. Try again later.", category)
+    if isinstance(error, APIConnectionError):
+        return ProviderFailure(502, "Analysis provider could not be reached. Try again later.", "connection_failure")
+    return ProviderFailure(502, "Analysis provider could not complete the request. Try again later.", "unexpected_provider_failure")
+
+
+async def get_provider(request: Request) -> Provider:
+    return request.app.state.provider

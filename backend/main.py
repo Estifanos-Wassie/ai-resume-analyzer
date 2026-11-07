@@ -1,46 +1,52 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request
+from contextlib import asynccontextmanager
+from time import perf_counter
+from uuid import uuid4
+
+import anyio
+from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from pydantic import ValidationError
+from config import Settings
 from input_validation import validate_inputs
-from provider import Provider, ProviderNotConfigured, get_provider
+from operations import log_analysis
+from provider import Provider, GroqProvider, classify_failure, get_provider
 from schemas import AnalysisResult
 import os
 import json
 
 load_dotenv()
 
-app = FastAPI()
+router = APIRouter()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.exception_handler(RequestValidationError)
 async def invalid_request(request: Request, exc: RequestValidationError):
     # Framework validation details can contain submitted form values.
     return JSONResponse(status_code=422, content={"detail": "A PDF file and a nonempty job description are required."})
 
-@app.get("/")
+@router.get("/")
 def home():
     return{"message" : "AI Resume Analyzer is running!"}
 
-@app.get("/health")
+@router.get("/health")
 def health():
-    api_key = os.getenv("GROQ_API_KEY")
-    if api_key and api_key.strip():
-        return {"status": "healthy", "api_key_loaded": True}
-    return {"status": "unhealthy", "api_key_loaded": False}
+    return {"status": "alive"}
 
 
-@app.post("/analyze", response_model=AnalysisResult)
+@router.get("/ready")
+def readiness():
+    configured = bool(os.getenv("GROQ_API_KEY", "").strip())
+    return JSONResponse(status_code=200 if configured else 503, content={
+        "configuration_ready": configured,
+        "provider_verified": False,
+        "scope": "local_configuration",
+    })
+
+
+@router.post("/analyze", response_model=AnalysisResult)
 async def analyze_resume(
+    request: Request,
     file: UploadFile = File(...),
     job_description: str = Form(...),
     provider: Provider = Depends(get_provider),
@@ -67,15 +73,67 @@ JOB DESCRIPTION:
 """
 
     try:
-        raw = await provider(prompt)
-    except ProviderNotConfigured:
-        raise HTTPException(503, "Analysis is unavailable because the provider is not configured.") from None
-    except Exception:
-        raise HTTPException(502, "Analysis provider could not complete the request. Try again later.") from None
+        with anyio.fail_after(request.app.state.settings.provider_timeout_seconds):
+            raw = await provider(prompt)
+    except Exception as error:
+        failure = classify_failure(error)
+        request.state.analysis_outcome = failure.category
+        headers = {"Retry-After": failure.retry_after} if failure.retry_after is not None else None
+        raise HTTPException(failure.status_code, failure.detail, headers=headers) from None
 
     try:
         if not isinstance(raw, str) or not raw.strip():
             raise ValueError()
-        return AnalysisResult.model_validate_json(raw)
+        result = AnalysisResult.model_validate_json(raw)
     except (ValidationError, ValueError):
+        request.state.analysis_outcome = "invalid_output"
         raise HTTPException(502, "Analysis provider returned an invalid response. Try again later.") from None
+    request.state.analysis_outcome = "success"
+    return result
+
+
+async def operational_log(request: Request, call_next):
+    if request.url.path != "/analyze" or request.method != "POST":
+        return await call_next(request)
+    request_id = uuid4().hex  # Do not trust or reflect caller-supplied identifiers.
+    start = perf_counter()
+    status_code = 499
+    outcome = "cancelled"
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        outcome = getattr(request.state, "analysis_outcome", "input_rejected")
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        log_analysis(request_id, (perf_counter() - start) * 1000, outcome, status_code)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings if settings is not None else Settings.from_env()
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        application.state.provider = GroqProvider(settings)
+        try:
+            yield
+        finally:
+            await application.state.provider.close()
+
+    application = FastAPI(lifespan=lifespan)
+    application.state.settings = settings
+    application.add_exception_handler(RequestValidationError, invalid_request)
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.allowed_origins),
+        allow_credentials=True,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+        expose_headers=["Retry-After", "X-Request-ID"],
+    )
+    application.middleware("http")(operational_log)
+    application.include_router(router)
+    return application
+
+
+app = create_app()

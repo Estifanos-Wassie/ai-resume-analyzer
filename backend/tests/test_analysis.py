@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 with patch.dict(os.environ, {"GROQ_API_KEY": ""}):
     import main
 import input_validation as inputs
+import operations
 import provider as providers
 
 
@@ -51,6 +52,7 @@ class AnalysisTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch.dict(os.environ, {"GROQ_API_KEY": ""}))
         self.enterContext(patch("socket.socket.connect", side_effect=AssertionError("Network forbidden")))
+        self.enterContext(patch.object(operations.logger, "handlers", [logging.NullHandler()]))
         self.provider = AsyncMock(return_value=json.dumps(VALID_RESULT))
         main.app.dependency_overrides[providers.get_provider] = lambda: self.provider
         self.addCleanup(main.app.dependency_overrides.clear)
@@ -260,7 +262,7 @@ class AnalysisTests(unittest.TestCase):
         main.app.dependency_overrides.clear()
         with patch.object(providers, "AsyncGroq") as sdk:
             self.assertEqual(self.client.get("/").status_code, 200)
-            self.assertEqual(self.client.get("/health").json(), {"status": "unhealthy", "api_key_loaded": False})
+            self.assertEqual(self.client.get("/health").json(), {"status": "alive"})
             self.assertEqual(self.analyze(content=b"").status_code, 400)
             response = self.analyze()
             self.assertEqual(response.status_code, 503)
@@ -337,16 +339,23 @@ class AnalysisTests(unittest.TestCase):
     def test_sdk_boundary_without_network(self):
         sdk_client = AsyncMock()
         sdk_client.chat.completions.create.return_value = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(VALID_RESULT)))])
-        context = AsyncMock()
-        context.__aenter__.return_value = sdk_client
-        with patch.dict(os.environ, {"GROQ_API_KEY": "synthetic-test-key"}), patch.object(providers, "AsyncGroq", return_value=context) as sdk:
-            result = asyncio.run(providers.generate_analysis("synthetic prompt"))
+        async def run():
+            provider = providers.GroqProvider(main.Settings())
+            try:
+                return await provider("synthetic prompt")
+            finally:
+                await provider.close()
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "synthetic-test-key"}), patch.object(providers, "AsyncGroq", return_value=sdk_client) as sdk:
+            result = asyncio.run(run())
         self.assertEqual(json.loads(result), VALID_RESULT)
-        sdk.assert_called_once_with(api_key="synthetic-test-key", timeout=30.0, max_retries=0)
+        self.assertEqual(sdk.call_args.kwargs["api_key"], "synthetic-test-key")
+        self.assertEqual(sdk.call_args.kwargs["timeout"].read, 30.0)
+        self.assertEqual(sdk.call_args.kwargs["max_retries"], 0)
         arguments = sdk_client.chat.completions.create.call_args.kwargs
         self.assertEqual(arguments["model"], "llama-3.3-70b-versatile")
         self.assertEqual(arguments["messages"][1]["content"], "synthetic prompt")
-        context.__aexit__.assert_awaited_once()
+        sdk_client.close.assert_awaited_once()
 
 
 if __name__ == "__main__":
