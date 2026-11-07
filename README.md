@@ -34,13 +34,19 @@ npm run dev
 ```
 
 Open `http://localhost:5173`. The frontend currently targets
-`http://localhost:8000/analyze`. CORS allows `http://localhost:5173` and
-`http://localhost:3000`; deployment URLs still need configuration.
+`http://localhost:8000/analyze`. CORS defaults to `http://localhost:5173` and
+`http://localhost:3000`; use `ALLOWED_ORIGINS` for deployment origins. The frontend
+API URL still needs separate deployment configuration.
 Interactive API documentation is at `http://localhost:8000/docs`.
 
 The backend starts without a key, allowing validation and tests to run. A valid
-analysis request without a configured key receives HTTP 503. `/health` reports
-key presence only; it does not verify credentials, quota, or model availability.
+analysis request without a configured key receives HTTP 503. `/health` is liveness
+only and always returns `200 {"status":"alive"}` when the application is running.
+`/ready` reports local configuration only: HTTP 200 when a nonempty key is present,
+otherwise 503, with `configuration_ready`, `provider_verified: false`, and
+`scope: "local_configuration"`. Neither endpoint creates an SDK client or makes
+provider calls. Readiness does not verify credentials, quota, connectivity, or
+model availability. Configuration changes require an application restart.
 Submitting a valid analysis with a key makes an external provider request and may
 consume quota or incur charges.
 
@@ -100,8 +106,9 @@ responses never receive fallback scores.
 | 400 | Unsupported filename, empty file, corrupt/unreadable PDF, or file-read failure |
 | 413 | Upload, page, resume-text, or job-description limit exceeded |
 | 422 | Missing/invalid form fields, whitespace-only description, encrypted PDF, or textless PDF |
-| 502 | Provider request failed or provider output violated the contract |
-| 503 | Provider configuration is missing |
+| 502 | Provider connection/server failure, other rejected upstream request, unexpected provider failure, or invalid analysis output |
+| 503 | Missing/invalid provider credentials, denied provider access, unavailable configured model, or provider rate limiting |
+| 504 | Total provider deadline, SDK timeout, or upstream HTTP 408 |
 
 Errors use a fixed, sanitized `detail` string, for example:
 
@@ -124,10 +131,63 @@ submitted content, credentials, provider output, or traces. Parser diagnostics a
 the SDK's request/exception debug logging are suppressed; do not enable body
 logging in deployment infrastructure.
 
-The provider is constructed lazily, uses the existing model with an asynchronous
-SDK call, a 30-second SDK timeout, and no automatic retries. Tests override
-`provider.get_provider` through FastAPI dependency injection. No provider key or
-network connection is required for the tests.
+Each application lifespan owns one lazy `AsyncGroq` client. It is constructed on
+the first valid analysis with a configured key and reused for subsequent requests.
+Completions are awaited, so a pending provider request does not block independent
+health requests. The FastAPI lifespan closes the client at shutdown, including
+after failed or cancelled requests. Cleanup is shielded from cancellation with a
+separate 5-second bound; cleanup failures/timeouts produce only a safe event.
+
+`PROVIDER_TIMEOUT_SECONDS` defaults to 30 seconds and bounds the entire provider
+execution, including client construction and the completion call, after input
+validation. SDK read/write timeouts use the same value. Connect/pool timeouts are
+the smaller of 5 seconds and the configured value. The total deadline cancels
+pending provider execution; it does not include upload parsing or PDF extraction.
+These asynchronous cancellation bounds assume a responsive event loop.
+
+The SDK normally retries certain failures twice. This application explicitly sets
+`max_retries=0` and has no application retry loop: each accepted analysis makes at
+most one completion attempt. There are no automatic fallback requests or scores.
+The installed SDK interface was checked against Groq's official
+[async, retry, timeout, and resource-management documentation](https://github.com/groq/groq-python).
+
+Provider authentication/permission failures (401/403) become service-level 503
+responses, without blaming the user's login. A provider 404, or a recognized
+`model_not_found`, `model_decommissioned`, or `model_not_available` code, also maps
+to 503. Other upstream rejections and provider 5xx/connection failures map to 502;
+input-validation status codes remain unchanged. Provider 429 maps to a temporary
+503. A valid provider `Retry-After` integer or HTTP date is normalized to integer
+seconds between 0 and 3,600; invalid values are omitted. It is exposed through CORS
+for browser clients. Provider and total timeouts return sanitized 504 responses.
+
+Every analysis request emits one JSON operational event containing only its
+generated request identifier, duration in milliseconds, fixed outcome category,
+and HTTP status. The identifier is returned as `X-Request-ID`; caller-supplied
+identifiers are ignored. No filenames, submitted text, provider bodies, credentials,
+or exception strings/traces are included. This does not configure infrastructure
+access/body logging; keep sensitive body logging disabled there too.
+
+Tests override `provider.get_provider` through FastAPI dependency injection or
+exercise the real SDK with an in-memory HTTP transport. No provider key or network
+connection is required for the tests.
+
+## Configuration
+
+| Variable | Behavior |
+| --- | --- |
+| `GROQ_API_KEY` | Backend-only credential; absent/blank keeps liveness and validation available but analysis returns 503 |
+| `PROVIDER_TIMEOUT_SECONDS` | Finite number from 1 through 120; default 30 |
+| `ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins; defaults to the two localhost origins when unset |
+
+For deployment, set `ALLOWED_ORIGINS=https://your-frontend.example` or include both
+deployment and localhost origins explicitly. A configured list replaces the
+defaults; an empty list denies all cross-origin access. Wildcards, credentials,
+paths, and malformed origins are rejected at startup with fixed messages.
+Credentialed CORS uses only that explicit list; it never allows `*`.
+
+Start from `backend/.env.example` without overwriting an existing `.env`. No
+credentials are stored in the example. The model remains
+`llama-3.3-70b-versatile`; changing models is outside this milestone.
 
 ## Checks
 
@@ -140,12 +200,17 @@ npm run lint
 npm run build
 ```
 
-The 40 backend tests generate synthetic PDFs and use a stub provider with network
-connections blocked. They cover input boundaries, extraction, encryption,
-validation failures, output types, sanitized errors, missing configuration,
-OpenAPI, bounded reads, and resource cleanup. The installed test client currently
+The 58 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
+with network connections blocked. They cover input boundaries, extraction,
+encryption, response validation, sanitized failures/logging, configuration, CORS,
+OpenAPI, request-count bounds, SDK timeout settings, and client cleanup. Event-based
+concurrency tests hold a provider request pending while health completes and
+expire real cancellation scopes deterministically without elapsed-time assertions.
+The installed test client currently
 emits an `httpx` deprecation warning; tests still pass.
 
-Live provider quality/availability, browser end-to-end interaction, deployment
-configuration, authentication/rate limiting, and more polished frontend error and
-input handling remain outside this reliability milestone.
+No live provider calls were used to verify this boundary. Real credentials,
+model access/availability, quotas, latency, output quality, and external retention
+remain unverified. Browser end-to-end interaction, deployment request-body limits,
+frontend API URL configuration, application authentication/rate limiting, and more
+polished frontend error/input handling remain outside this milestone.
