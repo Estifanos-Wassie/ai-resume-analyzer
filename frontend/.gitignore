@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated browser reports, traces, and screenshots
+playwright-report/
+test-results/
