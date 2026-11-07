@@ -19,6 +19,9 @@ cd frontend
 npm ci
 ```
 
+Create `frontend/.env` from `frontend/.env.example` only if it does not already
+exist, or add `VITE_API_BASE_URL=http://localhost:8000` to the existing file.
+
 Set `GROQ_API_KEY` in your environment or in an ignored `backend/.env` file;
 `backend/.env.example` lists the variable without a credential. Keep credentials
 on the backend. In separate terminals:
@@ -33,10 +36,12 @@ cd frontend
 npm run dev
 ```
 
-Open `http://localhost:5173`. The frontend currently targets
-`http://localhost:8000/analyze`. CORS defaults to `http://localhost:5173` and
-`http://localhost:3000`; use `ALLOWED_ORIGINS` for deployment origins. The frontend
-API URL still needs separate deployment configuration.
+Open `http://localhost:5173`. The frontend appends `/analyze` to
+`VITE_API_BASE_URL`, normalizing trailing slashes. Set this public URL before
+building deployment assets; Vite embeds it at build time. Rebuild after changes.
+Never put provider credentials in `VITE_` variables: they are exposed in the browser.
+CORS defaults to `http://localhost:5173` and `http://localhost:3000`; use
+`ALLOWED_ORIGINS` for deployment origins.
 Interactive API documentation is at `http://localhost:8000/docs`.
 
 The backend starts without a key, allowing validation and tests to run. A valid
@@ -178,6 +183,7 @@ connection is required for the tests.
 | `GROQ_API_KEY` | Backend-only credential; absent/blank keeps liveness and validation available but analysis returns 503 |
 | `PROVIDER_TIMEOUT_SECONDS` | Finite number from 1 through 120; default 30 |
 | `ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins; defaults to the two localhost origins when unset |
+| `VITE_API_BASE_URL` | Frontend-only public backend URL, set before Vite builds; localhost example in `frontend/.env.example` |
 
 For deployment, set `ALLOWED_ORIGINS=https://your-frontend.example` or include both
 deployment and localhost origins explicitly. A configured list replaces the
@@ -196,8 +202,11 @@ From the repository root:
 ```sh
 backend/venv/bin/python -m unittest discover -s backend/tests -v
 cd frontend
+npm test
 npm run lint
 npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
 The 58 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
@@ -209,8 +218,16 @@ expire real cancellation scopes deterministically without elapsed-time assertion
 The installed test client currently
 emits an `httpx` deprecation warning; tests still pass.
 
-No live provider calls were used to verify this boundary. Real credentials,
+The frontend includes 55 unit/component tests and ten executed Chromium browser
+checks across desktop and mobile viewports. Browser checks use a production build
+and a test-only FastAPI server to exercise multipart upload and real PDF extraction
+with an injected synthetic provider. They also verify safe errors, manual retry,
+keyboard access, Unicode limits, duplicate/stale request handling, and session
+clearing. Generated screenshots are under `frontend/test-results/screenshots/`.
+See [frontend setup, behavior, and test documentation](frontend/README.md).
+
+No live provider calls were used for verification. Real credentials,
 model access/availability, quotas, latency, output quality, and external retention
-remain unverified. Browser end-to-end interaction, deployment request-body limits,
-frontend API URL configuration, application authentication/rate limiting, and more
-polished frontend error/input handling remain outside this milestone.
+remain unverified. Deployment request-body limits, application authentication/rate
+limiting, deployed networking, other browser engines, real mobile hardware, and
+screen-reader testing remain outside this milestone.
