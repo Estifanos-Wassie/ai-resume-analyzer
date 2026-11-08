@@ -12,6 +12,11 @@ From this directory:
 npm ci
 ```
 
+Fresh installation was verified with Node 24.21.0 and npm 11.19.0, declared in
+the root `.nvmrc` and packageManager metadata. See the
+[reproducibility guide](../docs/verification.md) for Python/test dependencies and
+exact runtime selection. Test/build tooling must be installed with devDependencies.
+
 If `frontend/.env` does not exist, create it from `.env.example`. Otherwise edit the
 existing file without replacing its other settings:
 
@@ -37,6 +42,10 @@ environment files; rebuild/redeploy production assets after changing the URL.
 Every `VITE_` variable is public in the browser bundle. Never use a `VITE_` variable
 for `GROQ_API_KEY`, passwords, or any other secret. No provider key is needed to run
 frontend tests.
+
+The [container path](../docs/deployment.md) builds the API URL automatically from
+`PUBLIC_ORIGIN` and proxies `/api` on the same origin. The final frontend image
+contains static assets only; its build/runtime receives no provider credential.
 
 ## User journey
 
@@ -131,11 +140,17 @@ The five journeys run on desktop Chromium (1280×1000) and mobile-emulated Chrom
 Screenshots are generated with synthetic content in ignored
 `test-results/screenshots/{desktop,mobile}-{feedback,provider-error,validation,cleared}.png`.
 Tests check for horizontal overflow. Traces are retained only on failure in
-`test-results/`. Use `PLAYWRIGHT_BROWSERS_PATH` consistently for install and test if
+`test-results/`. JUnit reports are written to `test-reports/`, the HTML browser
+report to `playwright-report/`, and the suite has a three-minute global timeout.
+CI uploads only synthetic report/screenshot directories for seven days.
+Use `PLAYWRIGHT_BROWSERS_PATH` consistently for install and test if
 placing downloaded browsers outside the default cache.
 
 Verification uses stubs only: live Groq quality, credentials, quotas, model access,
 external retention, deployed networking, other browser engines, real mobile
 hardware, and screen-reader behavior remain unverified. npm audit currently reports
-four moderate findings in the ESLint development dependency chain; compatible
-fixes were applied without forcing an ESLint major-version change.
+four moderate findings from minimatch 10.2.6 in the ESLint development dependency
+chain. No compatible patched 10.x release is available. See the concrete paths,
+affected range, and shipped-code distinction in the
+[advisory review](../docs/verification.md#npm-advisory-review); no forced major
+substitution was applied.

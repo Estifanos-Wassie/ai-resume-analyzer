@@ -10,10 +10,12 @@ prediction of hiring outcomes. There is no independently validated scoring rubri
 
 ## Local setup
 
-Verified with Python 3.14.3 and Node 24.21.0. From the repository root:
+Fresh-install verified with Python 3.14.3, pip 26.0, Node 24.21.0, and npm 11.19.0.
+Select those runtimes (`.python-version`, `.nvmrc`) before running, from the root:
 
 ```sh
 python3 -m venv backend/venv
+backend/venv/bin/python -m pip install pip==26.0
 backend/venv/bin/python -m pip install -r backend/requirements.txt
 cd frontend
 npm ci
@@ -79,8 +81,9 @@ never silently truncated. Validation finishes before the provider is invoked.
 **Handler-level checks do not replace server/proxy request-body limits.** The
 framework parses multipart uploads before the handler and may spool them to
 temporary disk. Configure a total request-body limit at the server or proxy,
-allowing space for multipart overhead and the job description. No such deployment
-limit is configured in this repository yet.
+allowing space for multipart overhead and the job description. The included
+container path enforces a 6-MiB total-body cap at Nginx; direct Uvicorn development
+startup does not provide that proxy limit.
 
 ## Analysis response
 
@@ -201,6 +204,8 @@ From the repository root:
 
 ```sh
 backend/venv/bin/python -m unittest discover -s backend/tests -v
+backend/venv/bin/python -m pip check
+backend/venv/bin/python scripts/check_no_key.py
 cd frontend
 npm test
 npm run lint
@@ -226,8 +231,35 @@ keyboard access, Unicode limits, duplicate/stale request handling, and session
 clearing. Generated screenshots are under `frontend/test-results/screenshots/`.
 See [frontend setup, behavior, and test documentation](frontend/README.md).
 
+See [fresh-install results, CI, and advisory review](docs/verification.md) for exact
+runtime versions, dependency/test installation, and local versus hosted evidence.
+GitHub Actions runs the automated checks without provider credentials.
+
+## Container deployment
+
+See [the container deployment guide](docs/deployment.md). For a credential-free
+local smoke test with Docker running:
+
+```sh
+python3 scripts/check_deployment_config.py
+GROQ_API_KEY= docker compose --env-file deploy/.env.example up --build --detach --wait --wait-timeout 180
+backend/venv/bin/python scripts/smoke_deployment.py
+GROQ_API_KEY= docker compose --env-file deploy/.env.example down --volumes
+```
+
+Open `http://localhost:8080` while running. The built frontend and `/api` share that
+origin; FastAPI is unpublished. The provider key is runtime backend configuration
+only. Production images exclude test providers/routes and environment files.
+The local Docker daemon was unavailable, so container builds and proxy smoke tests
+remain unexecuted locally; the CI container job is the runtime verification path.
+
+Public deployment requires HTTPS termination plus appropriate access and usage
+controls before enabling a billable endpoint. CORS is not authentication. This task
+does not publish a service or provision paid resources.
+
 No live provider calls were used for verification. Real credentials,
 model access/availability, quotas, latency, output quality, and external retention
-remain unverified. Deployment request-body limits, application authentication/rate
-limiting, deployed networking, other browser engines, real mobile hardware, and
-screen-reader testing remain outside this milestone.
+remain unverified. Application authentication/rate limiting, public HTTPS ingress,
+deployed networking, other browser engines, real mobile hardware, and screen-reader
+testing remain outside this milestone. Container/proxy runtime checks must be
+confirmed on a Docker-enabled machine or in an observed CI run.
