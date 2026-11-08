@@ -1,0 +1,19 @@
+SYNTHETIC JOB DESCRIPTION - PORTFOLIO DEMO ONLY
+Fictional role: Junior Full-Stack Developer
+
+Required skills
+- Python and FastAPI for JSON APIs with input validation.
+- React, JavaScript, HTML, and CSS for accessible forms and useful error states.
+- Basic SQL and relational data modeling; SQLite project experience is acceptable.
+- Git, automated tests, and clear documentation for local development.
+
+Responsibilities
+Build and test small API endpoints and frontend forms. Explain implementation
+choices, review changes, and document reproducible setup and testing commands.
+
+Nice-to-have skills
+PostgreSQL, Docker, and production deployment experience. These are learning goals
+for a junior hire rather than mandatory qualifications.
+
+This document describes a fictional opportunity and contains no real company or
+hiring decision. The matching resume is a synthetic portfolio demonstration.

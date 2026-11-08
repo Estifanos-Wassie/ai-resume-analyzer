@@ -1,0 +1,28 @@
+SYNTHETIC RESUME - PORTFOLIO DEMO ONLY
+Fictional candidate and projects. Not a real person's resume.
+No personal contact, address, employer, or education details.
+
+PROFILE
+Fictional junior developer building Python APIs and React interfaces.
+
+SKILLS
+Python, FastAPI, Pydantic, React, JavaScript, HTML, CSS, SQL using SQLite,
+Git, pytest, and unittest. Experience described below is fictional project work.
+
+PROJECTS (FICTIONAL)
+Study Planner API
+- Built FastAPI CRUD endpoints for study tasks and deadlines.
+- Used Pydantic request validation and SQLite persistence.
+- Added pagination, status filters, and automated API tests with pytest.
+- Documented local installation, test commands, and sample requests.
+
+Reading Tracker Interface
+- Built a React interface for reading lists and completion status.
+- Added associated form labels, keyboard access, loading states, and clear errors.
+- Integrated JSON API responses and maintained session-only UI state.
+- Used Git branches and small commits for project changes.
+
+LEARNING AND LIMITS
+Completed self-directed Python, React, and SQL exercises in this fictional scenario.
+No professional employment, production deployment, or measured business impact is
+claimed. No hands-on PostgreSQL or Docker experience is claimed.
