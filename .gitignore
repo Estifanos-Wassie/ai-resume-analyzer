@@ -12,3 +12,7 @@ venv/
 # Node modules (frontend dependencies - huge folder)
 node_modules/
 
+
+# Local deployment overrides (may contain runtime credentials)
+deploy/.env.*
+!deploy/.env.example

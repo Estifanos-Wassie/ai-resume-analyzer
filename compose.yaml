@@ -1,0 +1,27 @@
+name: ai-resume-analyzer
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      PROVIDER_TIMEOUT_SECONDS: ${PROVIDER_TIMEOUT_SECONDS:-30}
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
+    expose:
+      - "8000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 150s
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${PUBLIC_ORIGIN:-http://localhost:8080}/api
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

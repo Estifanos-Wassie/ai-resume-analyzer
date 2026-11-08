@@ -1,0 +1,27 @@
+# Deny by default; never send environments, resumes, tests, or Git data to builds.
+*
+!backend/
+!backend/Dockerfile
+!backend/requirements.txt
+!backend/main.py
+!backend/config.py
+!backend/input_validation.py
+!backend/operations.py
+!backend/provider.py
+!backend/schemas.py
+!frontend/
+!frontend/Dockerfile
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.js
+!frontend/src/
+!frontend/src/**
+frontend/src/**/*.test.*
+!frontend/public/
+!frontend/public/**
+!deploy/
+!deploy/nginx.conf
+**/.env*
+**/*.pdf
+**/*.docx
