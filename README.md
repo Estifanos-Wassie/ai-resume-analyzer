@@ -8,6 +8,27 @@ from Groq using `llama-3.3-70b-versatile`.
 The match score is an AI estimate, not a validated employer ATS score or a
 prediction of hiring outcomes. There is no independently validated scoring rubric.
 
+**Current live-verification status:** the one authorized synthetic browser request
+received provider HTTP 404 and a sanitized application HTTP 503. No feedback was
+returned, and no retry was made. Successful live generation remains unverified;
+automated tests use stubs. See the [live verification record](docs/live-verification.md)
+for the exact scope and evidence.
+
+## Stack and project structure
+
+| Component | Technology and main files |
+| --- | --- |
+| Interface | React 19, Vite 8, plain CSS; `frontend/src/App.jsx` and `App.css` |
+| Browser validation/API handling | `frontend/src/analysis.js`; no provider credentials in the browser |
+| API and configuration | FastAPI, Uvicorn, python-dotenv; `backend/main.py` and `config.py` |
+| PDF extraction and limits | PyMuPDF; `backend/input_validation.py` |
+| Provider and response validation | Async Groq SDK, Pydantic; `backend/provider.py` and `schemas.py` |
+| Automated tests | Python unittest/httpx, Vitest/Testing Library, Playwright; `backend/tests/`, frontend `*.test.*`, and `frontend/e2e/` |
+| CI and deployment | GitHub Actions, Docker Compose, Nginx; `.github/workflows/ci.yml`, `compose.yaml`, and `deploy/nginx.conf` |
+
+Results and history are kept in browser memory only. No database is implemented;
+`backend/database.py` and `backend/models.py` are unused placeholders.
+
 ## Local setup
 
 Fresh-install verified with Python 3.14.3, pip 26.0, Node 24.21.0, and npm 11.19.0.
@@ -17,8 +38,7 @@ Select those runtimes (`.python-version`, `.nvmrc`) before running, from the roo
 python3 -m venv backend/venv
 backend/venv/bin/python -m pip install pip==26.0
 backend/venv/bin/python -m pip install -r backend/requirements.txt
-cd frontend
-npm ci
+npm ci --prefix frontend
 ```
 
 Create `frontend/.env` from `frontend/.env.example` only if it does not already
@@ -26,7 +46,7 @@ exist, or add `VITE_API_BASE_URL=http://localhost:8000` to the existing file.
 
 Set `GROQ_API_KEY` in your environment or in an ignored `backend/.env` file;
 `backend/.env.example` lists the variable without a credential. Keep credentials
-on the backend. In separate terminals:
+on the backend. In separate terminals, each starting from the repository root:
 
 ```sh
 cd backend
@@ -56,6 +76,22 @@ provider calls. Readiness does not verify credentials, quota, connectivity, or
 model availability. Configuration changes require an application restart.
 Submitting a valid analysis with a key makes an external provider request and may
 consume quota or incur charges.
+
+## Usage
+
+1. Choose one text-based PDF using the keyboard/file picker or drag-and-drop.
+   The [clearly labeled synthetic fixtures](docs/fixtures/README.md) are available
+   for demonstrations without personal data.
+2. Paste a matching job description and review the privacy notice. A valid
+   submission sends extracted resume text and the description to Groq and may incur
+   charges. Synthetic inputs still use the live provider when a key is configured.
+3. Submit once. A valid response displays the AI-estimated match, strengths,
+   missing skills, and suggestions. Errors preserve inputs. Retry is manual only;
+   an active Retry-After countdown must expire first. Do not retry a live
+   verification when its authorized request budget has been used.
+4. Cancel or edit inputs to abandon a pending browser request. Old responses cannot
+   replace newer state. Clear session resets inputs, results, and in-memory history;
+   it does not delete provider-held data or guarantee external processing stops.
 
 ## Input contract
 
@@ -187,6 +223,7 @@ connection is required for the tests.
 | `PROVIDER_TIMEOUT_SECONDS` | Finite number from 1 through 120; default 30 |
 | `ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins; defaults to the two localhost origins when unset |
 | `VITE_API_BASE_URL` | Frontend-only public backend URL, set before Vite builds; localhost example in `frontend/.env.example` |
+| `PUBLIC_ORIGIN` | Compose-only exact browser origin; default `http://localhost:8080`; determines the built `/api` URL and backend allowed origin |
 
 For deployment, set `ALLOWED_ORIGINS=https://your-frontend.example` or include both
 deployment and localhost origins explicitly. A configured list replaces the
@@ -235,6 +272,20 @@ See [fresh-install results, CI, and advisory review](docs/verification.md) for e
 runtime versions, dependency/test installation, and local versus hosted evidence.
 GitHub Actions runs the automated checks without provider credentials.
 
+## Screenshots
+
+These are **live-attempt error screenshots using synthetic data**, captured from
+the same page at desktop and mobile widths without another submission. They do
+not show successful live feedback. The complete fixture and verification details
+are in the [live record](docs/live-verification.md).
+
+<img src="docs/assets/live-attempt-error-desktop.png" width="540" alt="Desktop view of the synthetic live attempt showing a sanitized service-unavailable error">
+<img src="docs/assets/live-attempt-error-mobile.png" width="220" alt="Mobile-width view of the same synthetic live-attempt error">
+
+Previously generated screenshots under `frontend/test-results/screenshots/` come
+from stub-backed tests, are ignored generated artifacts, and are not evidence of
+successful live Groq analysis.
+
 ## Container deployment
 
 See [the container deployment guide](docs/deployment.md). For a credential-free
@@ -257,16 +308,27 @@ Public deployment requires HTTPS termination plus appropriate access and usage
 controls before enabling a billable endpoint. CORS is not authentication. This task
 does not publish a service or provision paid resources.
 
-Automated checks use stubs and no provider credentials. A separate
-[single live browser attempt](docs/live-verification.md) received provider 404 and
-a sanitized application 503; it produced no feedback and was not retried. Its
-[desktop](docs/assets/live-attempt-error-desktop.png) and
-[mobile-width](docs/assets/live-attempt-error-mobile.png) screenshots show a live
-failure state, not a successful analysis. Successful live generation, feedback
-quality, scoring validity, quotas, and external retention remain unverified.
-Application authentication/rate limiting, public HTTPS ingress,
-deployed networking, other browser engines, real mobile hardware, and screen-reader
-testing remain outside this milestone. Container/proxy runtime checks must be
-confirmed on a Docker-enabled machine or in an observed CI run; the prior
+The prior
 [hosted run at `7f9219d`](https://github.com/Estifanos-Wassie/ai-resume-analyzer/actions/runs/42432107906)
 passed both the checks and container jobs.
+
+## Known limitations
+
+- The single live attempt failed with provider 404/application 503. The precise
+  provider cause, successful generation, feedback relevance, unsupported candidate
+  claims, quotas, and external retention remain unverified. No model change or
+  additional live request has been made. Scoring accuracy and hiring validity are
+  not established by either automated checks or a future successful example.
+- PDF support requires extractable text. OCR, password-protected PDFs, and DOCX
+  are unsupported. PDF parsing is not separately timeboxed.
+- There is no persistent history, account system, application authentication,
+  rate/usage control, or provisioned public HTTPS ingress. These must be addressed
+  before exposing a billable endpoint; CORS is not authentication.
+- Four moderate development-tooling findings remain through `minimatch@10.2.6` in
+  ESLint. No compatible patched 10.x release was available at review time. The
+  production-only npm audit reported zero known findings, not a vulnerability-free
+  application. See the [concrete advisory review](docs/verification.md#npm-advisory-review).
+- Local Docker execution was unavailable; container checks passed on the cited
+  hosted runner. Public deployment, other browser engines, real mobile hardware,
+  and actual screen-reader speech remain unverified. The backend test client also
+  emits an existing httpx deprecation warning.
