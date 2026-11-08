@@ -61,7 +61,9 @@ mobile Chromium checks, lint, production build, and pip check passed**. The real
 backend started without credentials; `/health` returned 200, `/ready` and valid
 synthetic `/analyze` returned the documented 503, and test-only routes were absent.
 The installed test client emits an existing httpx deprecation warning; tests pass.
-No live Groq requests or real resumes were used.
+Those automated reproducibility checks used no live Groq requests or real resumes.
+A separate [controlled live attempt](live-verification.md) made exactly one Groq
+analysis request and received provider 404/application 503; it produced no feedback.
 
 ## CI
 
@@ -89,6 +91,11 @@ runtime secrets are uploaded. Locally the workflow passed actionlint. Hosted run
 are separate observations: check the
 [repository Actions page](https://github.com/Estifanos-Wassie/ai-resume-analyzer/actions)
 for the current result; local passes do not establish a hosted CI pass.
+
+[Hosted run 42432107906](https://github.com/Estifanos-Wassie/ai-resume-analyzer/actions/runs/42432107906)
+was observed passing both jobs at commit `7f9219d`, including actual container build
+and proxy smoke tests. That hosted result is distinct from locally unavailable
+Docker execution and from the later single live provider attempt.
 
 ## npm advisory review
 

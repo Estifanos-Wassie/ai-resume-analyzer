@@ -146,9 +146,13 @@ CI uploads only synthetic report/screenshot directories for seven days.
 Use `PLAYWRIGHT_BROWSERS_PATH` consistently for install and test if
 placing downloaded browsers outside the default cache.
 
-Verification uses stubs only: live Groq quality, credentials, quotas, model access,
-external retention, deployed networking, other browser engines, real mobile
-hardware, and screen-reader behavior remain unverified. npm audit currently reports
+Automated verification uses stubs only. A separate
+[single live browser attempt](../docs/live-verification.md) returned provider 404
+and sanitized application 503, with no accepted analysis or retry. Its screenshots
+are explicitly labeled live-attempt errors; existing test screenshots remain stub
+results. Successful live feedback, scoring validity, quotas, external retention,
+deployed networking, other browser engines, real mobile hardware, and screen-reader
+behavior remain unverified. npm audit currently reports
 four moderate findings from minimatch 10.2.6 in the ESLint development dependency
 chain. No compatible patched 10.x release is available. See the concrete paths,
 affected range, and shipped-code distinction in the

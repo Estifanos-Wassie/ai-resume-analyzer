@@ -257,9 +257,16 @@ Public deployment requires HTTPS termination plus appropriate access and usage
 controls before enabling a billable endpoint. CORS is not authentication. This task
 does not publish a service or provision paid resources.
 
-No live provider calls were used for verification. Real credentials,
-model access/availability, quotas, latency, output quality, and external retention
-remain unverified. Application authentication/rate limiting, public HTTPS ingress,
+Automated checks use stubs and no provider credentials. A separate
+[single live browser attempt](docs/live-verification.md) received provider 404 and
+a sanitized application 503; it produced no feedback and was not retried. Its
+[desktop](docs/assets/live-attempt-error-desktop.png) and
+[mobile-width](docs/assets/live-attempt-error-mobile.png) screenshots show a live
+failure state, not a successful analysis. Successful live generation, feedback
+quality, scoring validity, quotas, and external retention remain unverified.
+Application authentication/rate limiting, public HTTPS ingress,
 deployed networking, other browser engines, real mobile hardware, and screen-reader
 testing remain outside this milestone. Container/proxy runtime checks must be
-confirmed on a Docker-enabled machine or in an observed CI run.
+confirmed on a Docker-enabled machine or in an observed CI run; the prior
+[hosted run at `7f9219d`](https://github.com/Estifanos-Wassie/ai-resume-analyzer/actions/runs/42432107906)
+passed both the checks and container jobs.
