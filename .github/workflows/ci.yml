@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GROQ_API_KEY: ''
+  PYTHON_DOTENV_DISABLED: '1'
+  PYTHONDONTWRITEBYTECODE: '1'
+  VITE_API_BASE_URL: http://localhost:8000
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install pinned installers and dependencies
+        run: |
+          python -m venv backend/venv
+          backend/venv/bin/python -m pip install pip==26.0
+          backend/venv/bin/python -m pip install -r backend/requirements.txt
+          npm install --global npm@11.19.0 --ignore-scripts
+          npm ci --prefix frontend
+      - name: Backend dependencies and synthetic tests
+        run: |
+          backend/venv/bin/python -m pip check
+          backend/venv/bin/python -m unittest discover -s backend/tests -v
+          backend/venv/bin/python scripts/check_no_key.py
+      - name: Frontend unit tests, lint, and production build
+        working-directory: frontend
+        run: |
+          npm test -- --reporter=default --reporter=junit --outputFile.junit=test-reports/unit.xml
+          npm run lint
+          npm run build
+      - name: Install Chromium and system dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Synthetic desktop and mobile browser journeys
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Upload synthetic test reports and screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: synthetic-test-results
+          path: |
+            frontend/test-reports/
+            frontend/test-results/screenshots/
+            frontend/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - name: Install smoke-test dependencies
+        run: |
+          python -m venv backend/venv
+          backend/venv/bin/python -m pip install pip==26.0
+          backend/venv/bin/python -m pip install -r backend/requirements.txt
+      - name: Validate and start credential-free containers
+        run: |
+          python scripts/check_deployment_config.py
+          docker compose --env-file deploy/.env.example up --build --detach --wait --wait-timeout 180
+      - name: Verify frontend, proxy, limits, and runtime isolation
+        run: |
+          docker compose --env-file deploy/.env.example exec -T frontend nginx -t
+          backend/venv/bin/python scripts/smoke_deployment.py
+          docker compose --env-file deploy/.env.example exec -T backend python -c "from pathlib import Path; assert not Path('/app/tests').exists(); assert not list(Path('/app').rglob('.env')); assert not Path('/app/e2e_server.py').exists()"
+      - name: Stop containers
+        if: ${{ always() }}
+        run: docker compose --env-file deploy/.env.example down --volumes

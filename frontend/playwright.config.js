@@ -5,6 +5,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  globalTimeout: 180_000,
+  reporter: [['list'], ['junit', { outputFile: 'test-reports/browser.xml' }], ['html', { open: 'never' }]],
   timeout: 30_000,
   use: { baseURL: 'http://127.0.0.1:5174', trace: 'retain-on-failure', colorScheme: 'light' },
   projects: [

@@ -26,3 +26,4 @@ dist-ssr
 # Generated browser reports, traces, and screenshots
 playwright-report/
 test-results/
+test-reports/
