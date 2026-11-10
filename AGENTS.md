@@ -8,5 +8,8 @@
 - Review and improve the existing root README.md for each relevant task; create it only if missing. Cover the project overview, stack, setup, configuration, usage, tests, available screenshots, and known limitations, preserving accurate existing documentation.
 - Preserve the React/FastAPI architecture and public endpoint compatibility unless the task calls for changes.
 - Use synthetic resumes and stub providers in tests. Do not make live AI requests or use personal resumes without explicit authorization.
+- This project is free-only: use Groq Free-tier access only. Never upgrade plans, add payment methods, enable paid services, select paid fallbacks, or provision paid hosting. Keep the application local; do not provision hosting.
+- Before any future live request, require explicit confirmation that the configured key's organization/project is on the Free tier and the selected model is available within its remaining free limits, plus authorization for the request. Never infer billing status from a key, public catalog, readiness, or a successful request. If status cannot be verified locally, direct the user to Groq Console Settings → Billing → Plans and Organization/Project Limits; never request the API key.
+- If payment is required or free limits are exhausted, stop and report the limitation. Do not automatically upgrade, switch models, or retry. Continue independent offline work with deterministic mocks.
 - Track any user-specified live-request budget across task follow-ups. A follow-up or preference update does not reset that budget or authorize another live request.
 - Never include resume text, job descriptions, credentials, raw provider responses, or exception traces in application error responses or logs.

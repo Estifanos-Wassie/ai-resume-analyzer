@@ -9,6 +9,30 @@ This is a Groq-hosted model identifier; the application does not use OpenAI's AP
 The match score is an AI estimate, not a validated employer ATS score or a
 prediction of hiring outcomes. There is no independently validated scoring rubric.
 
+**Free-only, local use:** this project must not incur charges. Use only Groq
+Free-tier access; do not upgrade plans, add payment methods, enable paid services,
+use a paid fallback, or provision hosting. Tests use mocks. No additional live
+provider request is currently authorized; the cumulative live-analysis count is one.
+
+Before any future authorized live request, confirm the organization and project
+associated with your configured key in the Groq Console. In
+[Settings → Billing → Plans](https://console.groq.com/settings/billing/plans),
+verify the **current plan** is **Free ($0)**, rather than merely seeing a Free
+plan offered. In [Organization Limits](https://console.groq.com/settings/limits)
+and the selected project's **Settings → Project → Limits**, verify
+`openai/gpt-oss-120b` is available within free limits; review remaining usage in
+**Usage**. Do not change billing settings or share your key. If these facts cannot
+be established, payment is required, or free limits are exhausted, stop before
+submitting. A key, public catalog, successful request, or `/ready` response cannot
+prove your billing status. No authenticated account-console review was performed.
+
+The [published Free-plan limits](https://console.groq.com/docs/rate-limits) list
+this model, but are not account-specific confirmation. The listed 8K tokens/minute
+also needs consideration before future live verification: the current 8,192-token
+output cap plus input may exceed that allowance. Its free-quota compatibility is
+unverified; do not probe or upgrade to resolve it. The application does not enforce
+or verify an account's billing plan, so this policy requires operator confirmation.
+
 **Current live-verification status:** the one authorized synthetic browser request
 used the former `llama-3.3-70b-versatile` model and
 received provider HTTP 404 and a sanitized application HTTP 503. No feedback was
@@ -85,8 +109,9 @@ otherwise 503, with `configuration_ready`, `provider_verified: false`, and
 `scope: "local_configuration"`. Neither endpoint creates an SDK client or makes
 provider calls. Readiness does not verify credentials, quota, connectivity, or
 model availability. Configuration changes require an application restart.
-Submitting a valid analysis with a key makes an external provider request and may
-consume quota or incur charges.
+Submitting a valid analysis with a key makes an external provider request.
+Follow the free-only confirmation requirement above before submission; merely
+configuring a key does not make a request safe from charges on an unknown plan.
 
 `GROQ_MODEL` defaults when unset. An explicit blank value fails configuration
 validation; remove it or set `GROQ_MODEL=openai/gpt-oss-120b`, then restart the
@@ -98,8 +123,9 @@ backend. Existing `.env` files and credentials are not overwritten by this migra
    The [clearly labeled synthetic fixtures](docs/fixtures/README.md) are available
    for demonstrations without personal data.
 2. Paste a matching job description and review the privacy notice. A valid
-   submission sends extracted resume text and the description to Groq and may incur
-   charges. Synthetic inputs still use the live provider when a key is configured.
+   submission sends extracted resume text and the description to Groq. Complete
+   the Free-tier/model/quota confirmation above and obtain live-request authorization
+   first. Synthetic inputs still use the live provider when a key is configured.
 3. Submit once. A valid response displays the AI-estimated match, strengths,
    missing skills, and suggestions. Errors preserve inputs. Retry is manual only;
    an active Retry-After countdown must expire first. Do not retry a live
@@ -331,9 +357,11 @@ only. Production images exclude test providers/routes and environment files.
 The local Docker daemon was unavailable, so container builds and proxy smoke tests
 remain unexecuted locally; the CI container job is the runtime verification path.
 
-Public deployment requires HTTPS termination plus appropriate access and usage
-controls before enabling a billable endpoint. CORS is not authentication. This task
-does not publish a service or provision paid resources.
+Keep this project local; do not provision hosting. The deployment guide documents
+the existing container path, not authorization to publish it. Any future public
+deployment would require HTTPS termination plus appropriate access and usage
+controls; CORS is not authentication. Paid hosting and billable provider use are
+prohibited under the current project policy.
 
 The prior
 [hosted run at `7f9219d`](https://github.com/Estifanos-Wassie/ai-resume-analyzer/actions/runs/42432107906)
