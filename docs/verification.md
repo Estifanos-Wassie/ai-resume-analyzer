@@ -65,6 +65,11 @@ Those automated reproducibility checks used no live Groq requests or real resume
 A separate [controlled live attempt](live-verification.md) made exactly one Groq
 analysis request and received provider 404/application 503; it produced no feedback.
 
+The later [offline 404 diagnosis](provider-404-diagnosis.md) corrected overconfident
+404 categorization and added mocked routing/configuration regressions. The current
+backend suite has 64 passing tests; the 58-test clean-install result above is the
+original historical observation. No further provider API requests were used.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on pushes to main, pull requests, and manual dispatch.

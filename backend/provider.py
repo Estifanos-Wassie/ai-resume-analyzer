@@ -119,8 +119,11 @@ def classify_failure(error: Exception) -> ProviderFailure:
         body = error.body if isinstance(error.body, dict) else {}
         detail = body.get("error", body)
         code = detail.get("code") if isinstance(detail, dict) else None
-        if status == 404 or (isinstance(code, str) and code in {"model_not_found", "model_decommissioned", "model_not_available"}):
+        if isinstance(code, str) and code in {"model_not_found", "model_decommissioned", "model_not_available"}:
             return ProviderFailure(503, "Analysis service is unavailable because the configured model is unavailable.", "model_unavailable")
+        if status == 404:
+            # Status alone cannot distinguish a missing route from model visibility.
+            return ProviderFailure(503, "Analysis service is unavailable because the provider endpoint or requested resource could not be found.", "upstream_not_found")
         if status == 408:
             return ProviderFailure(504, "Analysis service timed out. Try again later.", "timeout")
         category = "server_failure" if status >= 500 else "upstream_rejected"

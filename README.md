@@ -14,6 +14,12 @@ returned, and no retry was made. Successful live generation remains unverified;
 automated tests use stubs. See the [live verification record](docs/live-verification.md)
 for the exact scope and evidence.
 
+The [offline 404 diagnosis](docs/provider-404-diagnosis.md) found the SDK route
+correct and no observed base-URL override. Groq's official notice retired this
+model for free/developer use on August 16, 2026, with an enterprise committed-spend
+exception. The key's tier/entitlement remains unknown; no model or account change
+and no further provider request were made.
+
 ## Stack and project structure
 
 | Component | Technology and main files |
@@ -196,9 +202,11 @@ The installed SDK interface was checked against Groq's official
 [async, retry, timeout, and resource-management documentation](https://github.com/groq/groq-python).
 
 Provider authentication/permission failures (401/403) become service-level 503
-responses, without blaming the user's login. A provider 404, or a recognized
-`model_not_found`, `model_decommissioned`, or `model_not_available` code, also maps
-to 503. Other upstream rejections and provider 5xx/connection failures map to 502;
+responses, without blaming the user's login. A recognized `model_not_found`,
+`model_decommissioned`, or `model_not_available` code maps to a model-specific 503.
+An unqualified provider 404 also maps to 503, but uses neutral endpoint/resource
+copy and the `upstream_not_found` category; status alone cannot diagnose the model.
+Other upstream rejections and provider 5xx/connection failures map to 502;
 input-validation status codes remain unchanged. Provider 429 maps to a temporary
 503. A valid provider `Retry-After` integer or HTTP date is normalized to integer
 seconds between 0 and 3,600; invalid values are omitted. It is exposed through CORS
@@ -220,6 +228,7 @@ connection is required for the tests.
 | Variable | Behavior |
 | --- | --- |
 | `GROQ_API_KEY` | Backend-only credential; absent/blank keeps liveness and validation available but analysis returns 503 |
+| `GROQ_BASE_URL` | Optional SDK override; SDK 1.4.0 defaults to `https://api.groq.com` and already appends the full completion route. Do not add an extra `/openai/v1` prefix; see the [diagnosis](docs/provider-404-diagnosis.md). Compose does not forward this variable. |
 | `PROVIDER_TIMEOUT_SECONDS` | Finite number from 1 through 120; default 30 |
 | `ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins; defaults to the two localhost origins when unset |
 | `VITE_API_BASE_URL` | Frontend-only public backend URL, set before Vite builds; localhost example in `frontend/.env.example` |
@@ -251,7 +260,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The 58 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
+The 64 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
 with network connections blocked. They cover input boundaries, extraction,
 encryption, response validation, sanitized failures/logging, configuration, CORS,
 OpenAPI, request-count bounds, SDK timeout settings, and client cleanup. Event-based
@@ -315,7 +324,9 @@ passed both the checks and container jobs.
 ## Known limitations
 
 - The single live attempt failed with provider 404/application 503. The precise
-  provider cause, successful generation, feedback relevance, unsupported candidate
+  account-specific cause remains unconfirmed; documented tier retirement is the
+  leading explanation. See the [evidence and missing information](docs/provider-404-diagnosis.md).
+  Successful generation, feedback relevance, unsupported candidate
   claims, quotas, and external retention remain unverified. No model change or
   additional live request has been made. Scoring accuracy and hiring validity are
   not established by either automated checks or a future successful example.

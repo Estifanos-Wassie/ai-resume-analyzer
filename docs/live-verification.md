@@ -5,6 +5,13 @@ outbound Groq analysis request was attempted. It returned HTTP 404. The producti
 application classified it as `model_unavailable` and returned sanitized HTTP 503.
 No score, strengths, missing skills, or suggestions were accepted or fabricated.
 
+**Offline follow-up, 2026-11-10:** [the 404 diagnosis](provider-404-diagnosis.md)
+confirmed canonical routing and documented model retirement for free/developer
+tiers, with an enterprise exception. The old `model_unavailable` log category was
+inferred from status alone. The classifier now keeps unqualified 404s neutral;
+the historical observation below is unchanged. No additional provider request
+was made, and the model/account settings were not changed.
+
 ## What ran
 
 The working tree was clean at application commit `7f9219d` before adding the

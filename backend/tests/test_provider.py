@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -83,7 +84,7 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
     async def test_sdk_status_failure_mapping_and_one_attempt(self):
         for status, expected, category in [
             (401, 503, "authentication"), (403, 503, "authentication"),
-            (404, 503, "model_unavailable"), (408, 504, "timeout"),
+            (404, 503, "upstream_not_found"), (408, 504, "timeout"),
             (429, 503, "rate_limited"), (500, 502, "server_failure"),
             (503, 502, "server_failure"), (400, 502, "upstream_rejected"),
             (422, 502, "upstream_rejected"),
@@ -104,12 +105,37 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.sdk_options), 1)
 
     async def test_unavailable_model_codes(self):
-        self.status = 400
-        for code in ["model_not_found", "model_decommissioned", "model_not_available"]:
-            with self.subTest(code=code):
-                self.code = code
-                self.assertEqual((await self.analyze()).status_code, 503)
-        self.assertEqual(len(self.requests), 3)
+        for status in [400, 404]:
+            for code in ["model_not_found", "model_decommissioned", "model_not_available"]:
+                with self.subTest(status=status, code=code), self.assertLogs(operations.logger) as captured:
+                    self.status, self.code = status, code
+                    response = await self.analyze()
+                    self.assertEqual(response.status_code, 503)
+                    self.assertIn("configured model", response.json()['detail'])
+                    self.assertEqual(json.loads(captured.records[-1].getMessage())['outcome'], 'model_unavailable')
+        self.assertEqual(len(self.requests), 6)
+
+    async def test_uncoded_404_does_not_claim_a_model_diagnosis(self):
+        self.status, self.code = 404, None
+        with self.assertLogs(operations.logger) as captured:
+            response = await self.analyze()
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('endpoint or requested resource', response.json()['detail'])
+        self.assertNotIn('configured model', response.json()['detail'])
+        self.assertEqual(json.loads(captured.records[-1].getMessage())['outcome'], 'upstream_not_found')
+        self.assertEqual(len(self.requests), 1)
+        self.assertNotIn(PRIVATE_TEXT, response.text + str(captured.output))
+
+    async def test_malformed_404_error_metadata_remains_neutral(self):
+        request = httpx.Request('POST', 'https://provider.example.test/openai/v1/chat/completions')
+        response = httpx.Response(404, request=request)
+        for body in [None, PRIVATE_TEXT, [], {'error': PRIVATE_TEXT}, {'error': {'code': []}}, {'code': 'unknown_code'}]:
+            with self.subTest(body_type=type(body).__name__):
+                error = providers.APIStatusError(PRIVATE_TEXT, response=response, body=body)
+                failure = providers.classify_failure(error)
+                self.assertEqual(failure.category, 'upstream_not_found')
+                self.assertEqual(failure.status_code, 503)
+                self.assertNotIn(PRIVATE_TEXT, failure.detail)
 
     async def test_connection_and_sdk_timeout_without_retries(self):
         for error, expected in [(httpx.ConnectError, 502), (httpx.ReadTimeout, 504), (httpx.ConnectTimeout, 504), (httpx.PoolTimeout, 504), (httpx.WriteTimeout, 504)]:
@@ -288,6 +314,69 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.http_clients[-1].is_closed)
         self.assertNotIn(PRIVATE_TEXT, str(captured.output))
         self.assertEqual(json.loads(captured.records[-1].getMessage()), {"event": "provider_cleanup", "outcome": "failed"})
+
+
+class SDKRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def capture_route(self, base_url=None):
+        from groq import AsyncGroq
+        requests = []
+
+        async def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json={
+                'id': 'synthetic', 'object': 'chat.completion', 'created': 0,
+                'model': 'llama-3.3-70b-versatile',
+                'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': json.dumps(VALID_RESULT)}}],
+            })
+
+        environment = {'GROQ_API_KEY': 'synthetic-test-key'}
+        if base_url is not None:
+            environment['GROQ_BASE_URL'] = base_url
+        with patch.dict(os.environ, environment, clear=True), patch('socket.socket.connect', side_effect=AssertionError('Network forbidden')):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
+                async with AsyncGroq(http_client=transport, max_retries=0) as client:
+                    result = await client.chat.completions.create(
+                        model='llama-3.3-70b-versatile',
+                        messages=[{'role': 'user', 'content': 'Synthetic routing check'}],
+                    )
+                    self.assertEqual(json.loads(result.choices[0].message.content), VALID_RESULT)
+        self.assertEqual(len(requests), 1)
+        self.assertTrue(transport.is_closed)
+        return requests[0]
+
+    async def test_sdk_default_matches_documented_completion_endpoint(self):
+        request = await self.capture_route()
+        self.assertEqual(str(request.url), 'https://api.groq.com/openai/v1/chat/completions')
+        self.assertEqual(request.method, 'POST')
+        self.assertEqual(json.loads(request.content)['model'], 'llama-3.3-70b-versatile')
+
+    async def test_sdk_root_override_preserves_completion_route(self):
+        for base in ['https://api.groq.com', 'https://api.groq.com/']:
+            with self.subTest(base=base):
+                request = await self.capture_route(base)
+                self.assertEqual(str(request.url), 'https://api.groq.com/openai/v1/chat/completions')
+
+    async def test_sdk_appends_full_route_to_base_override_path(self):
+        request = await self.capture_route('https://provider.example.test/openai/v1')
+        self.assertEqual(request.url.path, '/openai/v1/openai/v1/chat/completions')
+
+    async def test_dotenv_does_not_override_process_configuration(self):
+        from dotenv import load_dotenv
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / '.env'
+            path.write_text('GROQ_API_KEY=synthetic-file-key\nGROQ_BASE_URL=https://file.example.test\n')
+            with patch.dict(os.environ, {'GROQ_API_KEY': 'synthetic-process-key', 'GROQ_BASE_URL': 'https://process.example.test'}, clear=True):
+                load_dotenv(path, override=False)
+                self.assertEqual(os.environ['GROQ_BASE_URL'], 'https://process.example.test')
+                self.assertTrue(os.environ['GROQ_API_KEY'] == 'synthetic-process-key')
+            with patch.dict(os.environ, {'GROQ_API_KEY': ''}, clear=True):
+                load_dotenv(path, override=False)
+                self.assertTrue(os.environ['GROQ_API_KEY'] == '')
+                self.assertEqual(os.environ['GROQ_BASE_URL'], 'https://file.example.test')
+            with patch.dict(os.environ, {'GROQ_API_KEY': '', 'PYTHON_DOTENV_DISABLED': '1'}, clear=True):
+                load_dotenv(path, override=False)
+                self.assertNotIn('GROQ_BASE_URL', os.environ)
+                self.assertTrue(os.environ['GROQ_API_KEY'] == '')
 
 
 class ConfigurationTests(unittest.TestCase):
