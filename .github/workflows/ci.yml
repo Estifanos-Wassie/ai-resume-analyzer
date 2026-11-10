@@ -15,6 +15,7 @@ concurrency:
 
 env:
   GROQ_API_KEY: ''
+  GROQ_MODEL: openai/gpt-oss-120b
   PYTHON_DOTENV_DISABLED: '1'
   PYTHONDONTWRITEBYTECODE: '1'
   VITE_API_BASE_URL: http://localhost:8000

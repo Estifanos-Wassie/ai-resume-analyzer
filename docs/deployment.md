@@ -44,6 +44,15 @@ billable analysis. `PROVIDER_TIMEOUT_SECONDS` accepts 1–120, default 30. Keep
 credentials out of command output, build arguments, frontend variables, and Git.
 Shell variables take precedence over the explicit Compose environment file.
 
+`GROQ_MODEL` is a runtime backend setting, defaulting to `openai/gpt-oss-120b`.
+Add/update it manually in an existing private file if needed; no real `.env` is
+overwritten. Unset selects the default, while explicit blank/whitespace fails
+central validation. Compose preserves blank values rather than defaulting them.
+The [migration guide](model-migration.md) documents the strict-schema/low-reasoning
+request profile required for an override. No model API calls are used to validate
+configuration, and no failure triggers a model switch. Recreate the backend after
+model changes; frontend routing/schema and the Groq provider stay unchanged.
+
 ```sh
 docker compose --env-file deploy/.env.private up --build --detach --wait --wait-timeout 180
 docker compose --env-file deploy/.env.private down

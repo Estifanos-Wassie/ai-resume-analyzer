@@ -353,7 +353,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(sdk.call_args.kwargs["timeout"].read, 30.0)
         self.assertEqual(sdk.call_args.kwargs["max_retries"], 0)
         arguments = sdk_client.chat.completions.create.call_args.kwargs
-        self.assertEqual(arguments["model"], "llama-3.3-70b-versatile")
+        self.assertEqual(arguments["model"], "openai/gpt-oss-120b")
         self.assertEqual(arguments["messages"][1]["content"], "synthetic prompt")
         sdk_client.close.assert_awaited_once()
 

@@ -6,6 +6,7 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL-openai/gpt-oss-120b}
       PROVIDER_TIMEOUT_SECONDS: ${PROVIDER_TIMEOUT_SECONDS:-30}
       ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:8080}
     expose:

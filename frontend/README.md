@@ -4,6 +4,10 @@ React/Vite frontend for the existing FastAPI analysis contract. Provider credent
 belong exclusively on the backend. There are no production mock results or fallback
 scores.
 
+The backend now defaults `GROQ_MODEL` to Groq-hosted `openai/gpt-oss-120b`.
+Model selection is backend-only; the [offline migration](../docs/model-migration.md)
+keeps this frontend's four-field contract unchanged and makes no new live request.
+
 ## Setup
 
 From this directory:

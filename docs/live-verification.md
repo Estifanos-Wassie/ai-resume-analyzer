@@ -1,5 +1,9 @@
 # Controlled live verification — 2026-11-07
 
+The subsequent [configurable model migration](model-migration.md) was verified
+offline only. This record and its screenshots concern the legacy model; they do
+not show a GPT-OSS request or prove the original account-specific 404 cause.
+
 **Outcome: unsuccessful live analysis; safe error handling verified.** Exactly one
 outbound Groq analysis request was attempted. It returned HTTP 404. The production
 application classified it as `model_unavailable` and returned sanitized HTTP 503.

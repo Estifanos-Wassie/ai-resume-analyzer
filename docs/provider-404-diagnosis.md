@@ -1,5 +1,11 @@
 # Provider 404 diagnosis — 2026-11-10
 
+**Historical diagnosis at `808fe7b`:** the later authorized
+[offline migration](model-migration.md) replaces the hardcoded model with
+`GROQ_MODEL` (default `openai/gpt-oss-120b`) and forwards it through Compose.
+Statements below describe configuration/evidence at diagnosis time. The original
+account-specific cause is still unproven, and the cumulative live count stays one.
+
 The repository was clean at `3eaf2bf`; the prior README/preferences work and live
 verification were already published. This follow-up made **zero provider API
 requests**, including model-list/retrieve calls. Only local source/configuration,

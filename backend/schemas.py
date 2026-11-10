@@ -17,3 +17,17 @@ class AnalysisResult(BaseModel):
     strengths: FeedbackItems
     missing_skills: FeedbackItems
     suggestions: FeedbackItems
+
+    @classmethod
+    def provider_schema(cls) -> dict:
+        """Documented structural subset; application bounds stay authoritative."""
+        fields = cls.model_json_schema()['properties']
+        properties = {}
+        for name, field in fields.items():
+            properties[name] = {'type': field['type']}
+            if field['type'] == 'array':
+                properties[name]['items'] = {'type': field['items']['type']}
+        return {
+            'type': 'object', 'properties': properties,
+            'required': list(properties), 'additionalProperties': False,
+        }

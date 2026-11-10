@@ -3,12 +3,14 @@
 Upload a text-based PDF resume and paste a job description to receive an AI
 estimate of fit, strengths, missing skills, and suggestions. The React/Vite UI
 calls a FastAPI backend, which extracts PDF text with PyMuPDF and requests feedback
-from Groq using `llama-3.3-70b-versatile`.
+from Groq using configurable `GROQ_MODEL`, defaulting to `openai/gpt-oss-120b`.
+This is a Groq-hosted model identifier; the application does not use OpenAI's API.
 
 The match score is an AI estimate, not a validated employer ATS score or a
 prediction of hiring outcomes. There is no independently validated scoring rubric.
 
 **Current live-verification status:** the one authorized synthetic browser request
+used the former `llama-3.3-70b-versatile` model and
 received provider HTTP 404 and a sanitized application HTTP 503. No feedback was
 returned, and no retry was made. Successful live generation remains unverified;
 automated tests use stubs. See the [live verification record](docs/live-verification.md)
@@ -17,8 +19,11 @@ for the exact scope and evidence.
 The [offline 404 diagnosis](docs/provider-404-diagnosis.md) found the SDK route
 correct and no observed base-URL override. Groq's official notice retired this
 model for free/developer use on August 16, 2026, with an enterprise committed-spend
-exception. The key's tier/entitlement remains unknown; no model or account change
-and no further provider request were made.
+exception. The key's tier/entitlement remains unknown. The subsequent
+[offline model migration](docs/model-migration.md) selects the documented
+replacement without claiming that the original account-specific cause was proven.
+No further provider request or account change was made; live generation with the
+replacement is still unverified.
 
 ## Stack and project structure
 
@@ -82,6 +87,10 @@ provider calls. Readiness does not verify credentials, quota, connectivity, or
 model availability. Configuration changes require an application restart.
 Submitting a valid analysis with a key makes an external provider request and may
 consume quota or incur charges.
+
+`GROQ_MODEL` defaults when unset. An explicit blank value fails configuration
+validation; remove it or set `GROQ_MODEL=openai/gpt-oss-120b`, then restart the
+backend. Existing `.env` files and credentials are not overwritten by this migration.
 
 ## Usage
 
@@ -181,6 +190,12 @@ submitted content, credentials, provider output, or traces. Parser diagnostics a
 the SDK's request/exception debug logging are suppressed; do not enable body
 logging in deployment infrastructure.
 
+Requests use strict structural JSON-schema output, `include_reasoning=false`,
+`reasoning_effort=low`, and `max_completion_tokens=8192`. All public-schema bounds
+are still validated by Pydantic; reasoning metadata is never exposed. There is no
+automatic model/output-mode fallback. See the [parameter rationale and migration
+instructions](docs/model-migration.md) before selecting a compatible override.
+
 Each application lifespan owns one lazy `AsyncGroq` client. It is constructed on
 the first valid analysis with a configured key and reused for subsequent requests.
 Completions are awaited, so a pending provider request does not block independent
@@ -228,6 +243,7 @@ connection is required for the tests.
 | Variable | Behavior |
 | --- | --- |
 | `GROQ_API_KEY` | Backend-only credential; absent/blank keeps liveness and validation available but analysis returns 503 |
+| `GROQ_MODEL` | Backend model ID; default `openai/gpt-oss-120b` when unset. Explicit blanks are rejected. Restart/recreate the backend after changes. |
 | `GROQ_BASE_URL` | Optional SDK override; SDK 1.4.0 defaults to `https://api.groq.com` and already appends the full completion route. Do not add an extra `/openai/v1` prefix; see the [diagnosis](docs/provider-404-diagnosis.md). Compose does not forward this variable. |
 | `PROVIDER_TIMEOUT_SECONDS` | Finite number from 1 through 120; default 30 |
 | `ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins; defaults to the two localhost origins when unset |
@@ -241,8 +257,10 @@ paths, and malformed origins are rejected at startup with fixed messages.
 Credentialed CORS uses only that explicit list; it never allows `*`.
 
 Start from `backend/.env.example` without overwriting an existing `.env`. No
-credentials are stored in the example. The model remains
-`llama-3.3-70b-versatile`; changing models is outside this milestone.
+credentials are stored in the example. Local and Compose examples select
+`openai/gpt-oss-120b`. Groq lists it as a production model and recommended legacy
+replacement; the [migration record](docs/model-migration.md) links the official
+parameter/structured-output documentation checked against SDK 1.4.0.
 
 ## Checks
 
@@ -260,7 +278,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The 64 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
+The 70 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
 with network connections blocked. They cover input boundaries, extraction,
 encryption, response validation, sanitized failures/logging, configuration, CORS,
 OpenAPI, request-count bounds, SDK timeout settings, and client cleanup. Event-based
@@ -327,8 +345,8 @@ passed both the checks and container jobs.
   account-specific cause remains unconfirmed; documented tier retirement is the
   leading explanation. See the [evidence and missing information](docs/provider-404-diagnosis.md).
   Successful generation, feedback relevance, unsupported candidate
-  claims, quotas, and external retention remain unverified. No model change or
-  additional live request has been made. Scoring accuracy and hiring validity are
+  claims, quotas, and external retention remain unverified. The model was migrated
+  offline; no additional live request has been made. Scoring accuracy and hiring validity are
   not established by either automated checks or a future successful example.
 - PDF support requires extractable text. OCR, password-protected PDFs, and DOCX
   are unsupported. PDF parsing is not separately timeboxed.

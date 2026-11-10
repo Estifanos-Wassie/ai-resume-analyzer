@@ -15,6 +15,7 @@ from groq import AsyncGroq, APIConnectionError, APIStatusError, APITimeoutError
 
 from config import Settings
 from operations import logger
+from schemas import AnalysisResult
 
 Provider = Callable[[str], Awaitable[str | None]]
 
@@ -53,7 +54,7 @@ class GroqProvider:
                 max_retries=0,
             )
         response = await self._client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=self.settings.groq_model,
             messages=[
                 {
                     "role": "system",
@@ -62,7 +63,17 @@ class GroqProvider:
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=1024,
+            max_completion_tokens=8192,
+            reasoning_effort="low",
+            include_reasoning=False,
+            stream=False,
+            response_format={
+                'type': 'json_schema',
+                'json_schema': {
+                    'name': 'resume_analysis', 'strict': True,
+                    'schema': AnalysisResult.provider_schema(),
+                },
+            },
         )
         return response.choices[0].message.content
 

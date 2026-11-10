@@ -22,7 +22,8 @@ with patch.dict(os.environ, {"GROQ_API_KEY": "", "PYTHON_DOTENV_DISABLED": "1"})
     import main
 import operations
 import provider as providers
-from config import Settings
+from config import DEFAULT_GROQ_MODEL, Settings
+from schemas import AnalysisResult
 from test_analysis import make_pdf, VALID_RESULT, PRIVATE_TEXT
 
 
@@ -62,8 +63,8 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 "id": "synthetic-completion",
                 "object": "chat.completion",
                 "created": 0,
-                "model": "llama-3.3-70b-versatile",
-                "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": self.raw}}],
+                "model": "openai/gpt-oss-120b",
+                "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": self.raw, "reasoning": 'SYNTHETIC_PRIVATE_REASONING'}}],
             })
 
         def factory(**kwargs):
@@ -80,6 +81,52 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
 
     async def analyze(self, client=None, jd=PRIVATE_TEXT):
         return await (client or self.client).post("/analyze", files={"file": ("synthetic.pdf", self.pdf)}, data={"job_description": jd}, headers={"X-Request-ID": PRIVATE_TEXT})
+
+    async def test_default_model_and_structured_parameters_reach_sdk_transport(self):
+        with self.assertLogs(operations.logger) as captured:
+            response = await self.analyze()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), VALID_RESULT)
+        payload = json.loads(self.requests[-1].content)
+        self.assertEqual(payload['model'], DEFAULT_GROQ_MODEL)
+        self.assertEqual(payload['max_completion_tokens'], 8192)
+        self.assertNotIn('max_tokens', payload)
+        self.assertEqual(payload['reasoning_effort'], 'low')
+        self.assertFalse(payload['include_reasoning'])
+        self.assertFalse(payload['stream'])
+        self.assertNotIn('reasoning_format', payload)
+        self.assertEqual(payload['temperature'], 0.3)
+        self.assertEqual(payload['response_format'], {
+            'type': 'json_schema',
+            'json_schema': {'name': 'resume_analysis', 'strict': True, 'schema': AnalysisResult.provider_schema()},
+        })
+        schema = payload['response_format']['json_schema']['schema']
+        self.assertEqual(set(schema['required']), set(VALID_RESULT))
+        self.assertFalse(schema['additionalProperties'])
+        self.assertEqual(schema['properties']['match_score'], {'type': 'integer'})
+        self.assertEqual(schema['properties']['strengths'], {'type': 'array', 'items': {'type': 'string'}})
+        self.assertNotIn('SYNTHETIC_PRIVATE_REASONING', response.text + str(captured.output))
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(self.sdk_options[0]['max_retries'], 0)
+
+    async def test_explicit_model_reaches_sdk_without_automatic_switching(self):
+        with patch.dict(os.environ, {'GROQ_MODEL': ' openai/gpt-oss-20b '}):
+            app = main.create_app(Settings.from_env())
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                self.assertEqual((await self.analyze(client)).status_code, 200)
+                self.status = 404
+                self.assertEqual((await self.analyze(client)).status_code, 503)
+        self.assertEqual([json.loads(request.content)['model'] for request in self.requests], ['openai/gpt-oss-20b'] * 2)
+
+    async def test_structured_mode_still_rejects_bad_provider_content(self):
+        for raw in ['', 'not-json', '{"match_score":75}', json.dumps({**VALID_RESULT, 'match_score': True}), json.dumps({**VALID_RESULT, 'strengths': [' ']}), json.dumps({**VALID_RESULT, 'reasoning': 'SYNTHETIC_PRIVATE_REASONING'})]:
+            with self.subTest(case=type(raw).__name__):
+                self.raw = raw
+                response = await self.analyze()
+                self.assertEqual(response.status_code, 502)
+                self.assertNotIn('SYNTHETIC_PRIVATE_REASONING', response.text)
+                self.assertEqual(json.loads(self.requests[-1].content)['response_format']['json_schema']['strict'], True)
 
     async def test_sdk_status_failure_mapping_and_one_attempt(self):
         for status, expected, category in [
@@ -325,7 +372,7 @@ class SDKRoutingTests(unittest.IsolatedAsyncioTestCase):
             requests.append(request)
             return httpx.Response(200, json={
                 'id': 'synthetic', 'object': 'chat.completion', 'created': 0,
-                'model': 'llama-3.3-70b-versatile',
+                'model': 'openai/gpt-oss-120b',
                 'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': json.dumps(VALID_RESULT)}}],
             })
 
@@ -336,7 +383,7 @@ class SDKRoutingTests(unittest.IsolatedAsyncioTestCase):
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as transport:
                 async with AsyncGroq(http_client=transport, max_retries=0) as client:
                     result = await client.chat.completions.create(
-                        model='llama-3.3-70b-versatile',
+                        model='openai/gpt-oss-120b',
                         messages=[{'role': 'user', 'content': 'Synthetic routing check'}],
                     )
                     self.assertEqual(json.loads(result.choices[0].message.content), VALID_RESULT)
@@ -348,7 +395,7 @@ class SDKRoutingTests(unittest.IsolatedAsyncioTestCase):
         request = await self.capture_route()
         self.assertEqual(str(request.url), 'https://api.groq.com/openai/v1/chat/completions')
         self.assertEqual(request.method, 'POST')
-        self.assertEqual(json.loads(request.content)['model'], 'llama-3.3-70b-versatile')
+        self.assertEqual(json.loads(request.content)['model'], 'openai/gpt-oss-120b')
 
     async def test_sdk_root_override_preserves_completion_route(self):
         for base in ['https://api.groq.com', 'https://api.groq.com/']:
@@ -380,6 +427,29 @@ class SDKRoutingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_default_and_explicit_model_configuration(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(Settings().groq_model, 'openai/gpt-oss-120b')
+            self.assertEqual(Settings.from_env().groq_model, 'openai/gpt-oss-120b')
+        with patch.dict(os.environ, {'GROQ_MODEL': ' openai/gpt-oss-20b '}, clear=True):
+            self.assertEqual(Settings.from_env().groq_model, 'openai/gpt-oss-20b')
+
+    def test_blank_and_invalid_model_rejected_centrally_without_echo(self):
+        for model in ['', '  \n\t', 'invalid model ' + PRIVATE_TEXT, PRIVATE_TEXT * 20]:
+            with self.subTest(length=len(model)), patch.dict(os.environ, {'GROQ_MODEL': model}, clear=True):
+                with self.assertRaises(ValueError) as raised:
+                    Settings.from_env()
+                self.assertIn('GROQ_MODEL', str(raised.exception))
+                self.assertNotIn(PRIVATE_TEXT, str(raised.exception))
+                with self.assertRaises(ValueError):
+                    main.create_app()
+
+    def test_blank_model_does_not_fall_back_or_construct_sdk(self):
+        with patch.dict(os.environ, {'GROQ_MODEL': ''}), patch.object(providers, 'AsyncGroq') as sdk:
+            with self.assertRaisesRegex(ValueError, 'nonempty'):
+                main.create_app()
+            sdk.assert_not_called()
+
     def test_environment_settings(self):
         with patch.dict(os.environ, {"PROVIDER_TIMEOUT_SECONDS": "18.5", "ALLOWED_ORIGINS": " https://portfolio.example,https://portfolio.example,http://localhost:5173 "}):
             settings = Settings.from_env()
