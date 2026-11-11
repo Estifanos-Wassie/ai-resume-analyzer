@@ -19,6 +19,21 @@ async function upload(page, buffer = syntheticPdf, name = 'synthetic-resume.PDF'
 }
 const analyze = (page) => page.getByRole('button', { name: 'Analyze resume', exact: true })
 
+test('actual FastAPI: oversized token input is rejected before provider, then shortened manually', async ({ page, request }) => {
+  await upload(page)
+  const description = '😀'.repeat(5000)
+  await page.getByLabel('Job description').fill(description)
+  await analyze(page).click()
+  await expect(page.getByRole('alert')).toContainText('Shorten either input')
+  await expect(page.getByRole('alert')).toContainText('No analysis was sent')
+  await expect(page.getByLabel('Job description')).toHaveValue(description)
+  expect((await (await request.get(`${api}/__test/state`)).json()).provider_calls).toBe(0)
+  await page.getByLabel('Job description').fill('Synthetic Python developer')
+  await analyze(page).click()
+  await expect(page.getByRole('heading', { name: 'Your feedback' })).toBeVisible()
+  expect((await (await request.get(`${api}/__test/state`)).json()).provider_calls).toBe(1)
+})
+
 async function screenshot(page, testInfo, name) {
   await page.screenshot({ path: `test-results/screenshots/${testInfo.project.name}-${name}.png`, fullPage: true, animations: 'disabled' })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -102,7 +117,8 @@ test('validation in the browser and actual backend: invalid drop, whitespace, bl
 
 test('actual multipart Unicode and newline counts agree at the 20,000-character boundary', async ({ page, request }) => {
   await upload(page)
-  const job = '😀'.repeat(19_997) + '\ny'
+  // Compressible filler isolates the character ceiling from the token ceiling.
+  const job = 'x'.repeat(19_996) + '😀\ny'
   await page.getByLabel('Job description').fill(job)
   await expect(page.locator('#description-count')).toHaveText('20,000 / 20,000 characters')
   await analyze(page).click()

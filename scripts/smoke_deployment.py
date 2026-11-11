@@ -30,6 +30,11 @@ def main():
         # Exercise a full-size file plus the maximum UTF-8 job-description payload.
         padded = pdf + b' ' * (5 * 1024 * 1024 - len(pdf))
         result = client.post('/api/analyze', files={'file': ('synthetic.pdf', padded)}, data={'job_description': '\U0001f600' * 20_000})
+        # The proxy admits the body, but the independent token policy rejects it.
+        assert result.status_code == 413 and 'local Free-tier token budget' in result.json()['detail']
+        assert 'x-request-id' in result.headers
+        # Compressible maximum-length text still exercises missing configuration.
+        result = client.post('/api/analyze', files={'file': ('synthetic.pdf', padded)}, data={'job_description': 'x' * 19_999 + '\U0001f600'})
         assert result.status_code == 503
         assert result.json() == {'detail': 'Analysis is unavailable because the provider is not configured.'}
         oversized_file = client.post('/api/analyze', files={'file': ('synthetic.pdf', padded + b' ')}, data={'job_description': 'Synthetic role'})
@@ -37,7 +42,7 @@ def main():
         oversized_body = client.post('/api/analyze', content=b'x' * (6 * 1024 * 1024 + 1), headers={'Content-Type': 'application/octet-stream'})
         assert oversized_body.status_code == 413
         assert 'x-request-id' not in oversized_body.headers  # Rejected at proxy, before handler.
-    print('Frontend/assets, proxy health/readiness, no-key analysis, per-file/total-body limits, and absent test routes passed.')
+    print('Frontend/assets, proxy health/readiness, no-key analysis, token/file/body limits, and absent test routes passed.')
 
 
 if __name__ == '__main__':

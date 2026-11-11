@@ -73,6 +73,9 @@ const fileDetails = new Map([
 ])
 
 export function normalizeApiError(status, body) {
+  if (status === 413 && body?.detail === 'Resume and job description exceed the local Free-tier token budget. Shorten the resume or job description and try again. No analysis was sent.') {
+    return { message: 'The combined resume and job description exceed the local Free-tier token budget. Shorten either input and try again. No analysis was sent; your inputs are preserved.', fields: {} }
+  }
   const fields = {}
   const detail = body?.detail
   if ([400, 413, 422].includes(status)) {

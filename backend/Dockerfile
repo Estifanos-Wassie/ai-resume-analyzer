@@ -7,7 +7,8 @@ COPY backend/requirements.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 10001 app
 # Explicit runtime allowlist: no tests, environment files, or dependency overrides.
-COPY backend/main.py backend/config.py backend/input_validation.py backend/operations.py backend/provider.py backend/schemas.py ./
+COPY backend/main.py backend/config.py backend/input_validation.py backend/operations.py backend/provider.py backend/schemas.py backend/analysis_request.py ./
+COPY backend/tokenizer_data/o200k_base.tiktoken.gz backend/tokenizer_data/LICENSE ./tokenizer_data/
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \

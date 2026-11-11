@@ -26,12 +26,18 @@ be established, payment is required, or free limits are exhausted, stop before
 submitting. A key, public catalog, successful request, or `/ready` response cannot
 prove your billing status. No authenticated account-console review was performed.
 
-The [published Free-plan limits](https://console.groq.com/docs/rate-limits) list
-this model, but are not account-specific confirmation. The listed 8K tokens/minute
-also needs consideration before future live verification: the current 8,192-token
-output cap plus input may exceed that allowance. Its free-quota compatibility is
-unverified; do not probe or upgrade to resolve it. The application does not enforce
-or verify an account's billing plan, so this policy requires operator confirmation.
+The user privately confirmed the key-to-console association and Free ($0) limits
+for this model: **30 requests/minute, 1,000 requests/day, 8,000 tokens/minute,
+200,000 tokens/day**. No key suffix or account screenshot is stored in this repo.
+The backend now admits at most **4,500 estimated complete input tokens**, reserves
+**2,000 completion tokens** for reasoning and JSON, and leaves **1,500 tokens of
+headroom**. Oversized requests receive HTTP 413 asking users to shorten either
+document; nothing is silently truncated or sent. The bundled GPT-OSS tokenizer
+runs offline. See [token accounting and its limits](docs/free-tier-budget.md).
+This is per-request admission, not a remaining/shared quota or billing guarantee.
+Project model permissions, project limits, separate input/output restrictions and
+remaining usage still need console review before any separately authorized live
+request. The application does not enforce or verify the account's billing plan.
 
 **Current live-verification status:** the one authorized synthetic browser request
 used the former `llama-3.3-70b-versatile` model and
@@ -43,7 +49,9 @@ for the exact scope and evidence.
 The [offline 404 diagnosis](docs/provider-404-diagnosis.md) found the SDK route
 correct and no observed base-URL override. Groq's official notice retired this
 model for free/developer use on August 16, 2026, with an enterprise committed-spend
-exception. The key's tier/entitlement remains unknown. The subsequent
+exception. The key's tier was unknown during that diagnosis; the later user
+confirmation of Free status does not establish the original error's exact cause.
+The subsequent
 [offline model migration](docs/model-migration.md) selects the documented
 replacement without claiming that the original account-specific cause was proven.
 No further provider request or account change was made; live generation with the
@@ -144,6 +152,12 @@ backend. Existing `.env` files and credentials are not overwritten by this migra
 | PDF pages | 20 |
 | Extracted resume text | 50,000 characters, including extracted whitespace |
 | Job description | 20,000 characters after trimming surrounding whitespace |
+| Complete request input estimate | 4,500 tokens, including instructions, both schemas and 256 tokens of framing padding |
+
+The token ceiling applies in addition to the file/page/character limits: reaching
+a character limit does not guarantee admission. All SDK request fields are counted
+using GPT-OSS ordinary-text BPE; private provider rendering remains an estimate.
+No tokenizer network download is needed, and counting runs in a worker thread.
 
 The filename must end in `.pdf`, case-insensitively. The backend also opens and
 reads the document as a PDF; filename and MIME type alone are insufficient.
@@ -217,7 +231,10 @@ the SDK's request/exception debug logging are suppressed; do not enable body
 logging in deployment infrastructure.
 
 Requests use strict structural JSON-schema output, `include_reasoning=false`,
-`reasoning_effort=low`, and `max_completion_tokens=8192`. All public-schema bounds
+`reasoning_effort=low`, and `max_completion_tokens=2000` (reasoning plus final JSON).
+The prompt requests concise feedback without changing the response schema.
+Truncated/non-`stop` completions receive sanitized 502, even if the JSON parses.
+All public-schema bounds
 are still validated by Pydantic; reasoning metadata is never exposed. There is no
 automatic model/output-mode fallback. See the [parameter rationale and migration
 instructions](docs/model-migration.md) before selecting a compatible override.
@@ -304,20 +321,21 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The 70 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
+The 81 backend tests generate synthetic PDFs and use stubs or mocked SDK transport
 with network connections blocked. They cover input boundaries, extraction,
 encryption, response validation, sanitized failures/logging, configuration, CORS,
-OpenAPI, request-count bounds, SDK timeout settings, and client cleanup. Event-based
+OpenAPI, request-count bounds, SDK timeout settings, client cleanup, complete-request
+token boundaries, Unicode, offline tokenizer integrity and truncation. Event-based
 concurrency tests hold a provider request pending while health completes and
 expire real cancellation scopes deterministically without elapsed-time assertions.
 The installed test client currently
 emits an `httpx` deprecation warning; tests still pass.
 
-The frontend includes 55 unit/component tests and ten executed Chromium browser
+The frontend includes 56 unit/component tests and twelve Chromium browser
 checks across desktop and mobile viewports. Browser checks use a production build
 and a test-only FastAPI server to exercise multipart upload and real PDF extraction
 with an injected synthetic provider. They also verify safe errors, manual retry,
-keyboard access, Unicode limits, duplicate/stale request handling, and session
+keyboard access, Unicode limits, token-budget rejection/recovery, duplicate/stale request handling, and session
 clearing. Generated screenshots are under `frontend/test-results/screenshots/`.
 See [frontend setup, behavior, and test documentation](frontend/README.md).
 

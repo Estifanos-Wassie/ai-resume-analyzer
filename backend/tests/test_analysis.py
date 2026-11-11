@@ -22,6 +22,7 @@ with patch.dict(os.environ, {"GROQ_API_KEY": ""}):
 import input_validation as inputs
 import operations
 import provider as providers
+import analysis_request as budget
 
 
 VALID_RESULT = {
@@ -80,6 +81,39 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("Synthetic Candidate", prompt)
         self.assertIn("JOB DESCRIPTION:\nPython developer\n", prompt)
         self.assertIn('"additionalProperties": false', prompt)
+
+    def test_real_budget_boundary_and_untruncated_inputs(self):
+        # The actual complete application prompt must cross the policy boundary
+        # with original inputs intact, independently of character/upload limits.
+        self.assertEqual(self.analyze().status_code, 200)
+        template = self.provider.call_args.args[0]
+        def prompt_for(count):
+            return template.replace('JOB DESCRIPTION:\nPython developer\n', 'JOB DESCRIPTION:\n' + '😀 ' * count + 'end\n')
+        low, high = 0, 5000
+        while low < high:
+            middle = (low + high + 1) // 2
+            if budget.estimated_input_tokens(prompt_for(middle), 'openai/gpt-oss-120b') <= 4500:
+                low = middle
+            else:
+                high = middle - 1
+        self.assertGreater(low, 0)
+        for count, expected in [(low, 200), (low + 1, 413)]:
+            with self.subTest(count=count):
+                self.provider.reset_mock()
+                response = self.analyze(jd='😀 ' * count + 'end')
+                self.assertEqual(response.status_code, expected)
+                if expected == 200:
+                    self.assertEqual(self.provider.call_args.args[0], prompt_for(count))
+                    self.assertEqual(budget.estimated_input_tokens(prompt_for(count), 'openai/gpt-oss-120b'), 4500)
+                else:
+                    self.provider.assert_not_awaited()
+                    self.assertIn('Shorten', response.json()['detail'])
+
+    def test_tokenizer_failure_returns_sanitized_503_without_provider(self):
+        with patch.object(main, 'validate_request_budget', side_effect=budget.TokenizerUnavailable(PRIVATE_TEXT)):
+            response = self.analyze()
+        self.assert_rejected(response, 503)
+        self.assertNotIn(PRIVATE_TEXT, response.text)
 
     def test_uppercase_extension(self):
         self.assertEqual(self.analyze(filename="RESUME.PDF").status_code, 200)
@@ -159,7 +193,8 @@ class AnalysisTests(unittest.TestCase):
 
     def test_extracted_text_limit_boundaries(self):
         for count, expected in [(50_000, 200), (50_001, 413)]:
-            with self.subTest(count=count), patch.object(fitz.Page, "get_text", return_value="x" * count):
+            # Compressible text isolates the independent extraction-character cap.
+            with self.subTest(count=count), patch.object(fitz.Page, "get_text", return_value="x" + " " * (count - 1)):
                 self.provider.reset_mock()
                 response = self.analyze()
                 self.assertEqual(response.status_code, expected)
@@ -338,7 +373,7 @@ class AnalysisTests(unittest.TestCase):
 
     def test_sdk_boundary_without_network(self):
         sdk_client = AsyncMock()
-        sdk_client.chat.completions.create.return_value = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(VALID_RESULT)))])
+        sdk_client.chat.completions.create.return_value = SimpleNamespace(choices=[SimpleNamespace(finish_reason='stop', message=SimpleNamespace(content=json.dumps(VALID_RESULT)))])
         async def run():
             provider = providers.GroqProvider(main.Settings())
             try:

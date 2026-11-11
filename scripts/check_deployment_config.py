@@ -27,7 +27,7 @@ for model in ['openai/gpt-oss-20b', '']:
         cwd=root, env={**environment, 'GROQ_MODEL': model}, capture_output=True, text=True, check=True,
     )
     assert json.loads(override.stdout)['services']['backend']['environment']['GROQ_MODEL'] == model
-expected = {'requirements.txt', 'main.py', 'config.py', 'input_validation.py', 'operations.py', 'provider.py', 'schemas.py'}
+expected = {'requirements.txt', 'main.py', 'config.py', 'input_validation.py', 'operations.py', 'provider.py', 'schemas.py', 'analysis_request.py', 'o200k_base.tiktoken.gz', 'LICENSE'}
 copied = set()
 for line in (root / 'backend/Dockerfile').read_text().splitlines():
     if line.startswith('COPY '):

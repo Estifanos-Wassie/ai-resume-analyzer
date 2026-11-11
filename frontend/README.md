@@ -127,8 +127,8 @@ existing dependency override. Synthetic PDFs are generated with PyMuPDF. Product
 Some additional cases intercept browser responses to verify malformed-success and
 network-error handling; the actual-backend journeys do not intercept `/analyze`.
 
-The five journeys run on desktop Chromium (1280×1000) and mobile-emulated Chromium
-(390×844), for ten browser checks:
+The six journeys run on desktop Chromium (1280×1000) and mobile-emulated Chromium
+(390×844), for twelve browser checks:
 
 1. Keyboard upload, actual multipart extraction, temporary provider error, manual
    retry, feedback/history, and session clearing. A controlled browser clock
@@ -140,6 +140,13 @@ The five journeys run on desktop Chromium (1280×1000) and mobile-emulated Chrom
 4. FastAPI validation arrays, invalid success shapes, non-JSON responses, network
    failure, and manual retry without sensitive-marker disclosure.
 5. Duplicate prevention, cancellation on edits, and protection from stale responses.
+6. Combined token-budget rejection through the real backend, zero provider calls
+   for the rejected request, preserved inputs, and manual recovery after shortening.
+
+The backend additionally enforces a 4,500-token complete-input estimate before
+provider use, independently of the frontend's character/file limits. The exact
+safe budget error maps to local guidance to shorten either document. The frontend
+does not try to estimate organization quota; see [Free-tier accounting](../docs/free-tier-budget.md).
 
 Screenshots are generated with synthetic content in ignored
 `test-results/screenshots/{desktop,mobile}-{feedback,provider-error,validation,cleared}.png`.

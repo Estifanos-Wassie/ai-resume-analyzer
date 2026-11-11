@@ -47,6 +47,14 @@ describe('response validation', () => {
 })
 
 describe('safe errors and manual retry', () => {
+  it('asks users to shorten combined input for the known local token-budget error', () => {
+    const detail = 'Resume and job description exceed the local Free-tier token budget. Shorten the resume or job description and try again. No analysis was sent.'
+    const result = normalizeApiError(413, { detail })
+    expect(result.message).toContain('Shorten either input')
+    expect(result.message).toContain('No analysis was sent')
+    expect(result.message).toContain('inputs are preserved')
+    expect(normalizeApiError(413, { detail: `${detail} SECRET` }).message).not.toContain('SECRET')
+  })
   it.each([400, 413, 422, 502, 503, 504, 500])('normalizes HTTP %i without echoing raw details', (status) => {
     const result = normalizeApiError(status, { detail: 'SENSITIVE_SERVER_TRACE' })
     expect(result.message).toBeTruthy()

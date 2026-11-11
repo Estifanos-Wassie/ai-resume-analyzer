@@ -26,9 +26,16 @@ provider: it refuses to proceed unless `/api/ready` reports missing configuratio
 
 The smoke script checks frontend HTML/assets, `/api/health` (200), `/api/ready`
 (503), valid synthetic analysis (503 with the documented missing-configuration
-message), a full 5-MiB PDF plus 20,000 Unicode characters, the per-file 413, the
+message with compressible maximum-length text), a full 5-MiB PDF plus 20,000
+Unicode characters rejected by the local token check (413), the per-file 413, the
 proxy's total-body 413, and absence of `/api/__test/state`. No test provider is used
 by these containers; provider-disabled errors exercise the real production path.
+
+The fixed [Free-tier token policy](free-tier-budget.md) and bundled offline
+tokenizer are included in production images. No tokenizer download is needed at
+runtime. This remains a local-only container path, not authorization to provision
+hosting or use paid services. Account/project access and shared quota still need
+console confirmation before any separately authorized live submission.
 
 ## Runtime configuration
 

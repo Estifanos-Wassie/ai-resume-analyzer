@@ -9,6 +9,10 @@
 !backend/operations.py
 !backend/provider.py
 !backend/schemas.py
+!backend/analysis_request.py
+!backend/tokenizer_data/
+!backend/tokenizer_data/o200k_base.tiktoken.gz
+!backend/tokenizer_data/LICENSE
 !frontend/
 !frontend/Dockerfile
 !frontend/package.json

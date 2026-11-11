@@ -1,5 +1,11 @@
 # Configurable Groq model migration — 2026-11-10
 
+This records the migration at `b76d9e1`. Its original 8,192-token completion cap
+was subsequently replaced with the [Free-tier budget](free-tier-budget.md):
+4,500 estimated complete input tokens, 2,000 completion tokens including reasoning,
+and 1,500 headroom. The profile/counts below describe the historical migration.
+No additional provider request was made.
+
 The backend now reads `GROQ_MODEL` centrally through `Settings`, defaulting to
 `openai/gpt-oss-120b` when the variable is absent. Groq remains the provider and the
 SDK endpoint remains `https://api.groq.com/openai/v1/chat/completions`; the model's

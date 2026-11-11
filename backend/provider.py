@@ -15,7 +15,7 @@ from groq import AsyncGroq, APIConnectionError, APIStatusError, APITimeoutError
 
 from config import Settings
 from operations import logger
-from schemas import AnalysisResult
+from analysis_request import request_parameters
 
 Provider = Callable[[str], Awaitable[str | None]]
 
@@ -25,6 +25,10 @@ logging.getLogger("groq._base_client").setLevel(logging.WARNING)
 
 
 class ProviderNotConfigured(Exception):
+    pass
+
+
+class ProviderOutputInvalid(Exception):
     pass
 
 
@@ -54,27 +58,10 @@ class GroqProvider:
                 max_retries=0,
             )
         response = await self._client.chat.completions.create(
-            model=self.settings.groq_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a resume analysis assistant. Always respond with valid JSON only.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            max_completion_tokens=8192,
-            reasoning_effort="low",
-            include_reasoning=False,
-            stream=False,
-            response_format={
-                'type': 'json_schema',
-                'json_schema': {
-                    'name': 'resume_analysis', 'strict': True,
-                    'schema': AnalysisResult.provider_schema(),
-                },
-            },
+            **request_parameters(prompt, self.settings.groq_model),
         )
+        if not response.choices or response.choices[0].finish_reason != 'stop':
+            raise ProviderOutputInvalid()
         return response.choices[0].message.content
 
     async def close(self):
@@ -117,6 +104,8 @@ def safe_retry_after(value: str | None) -> str | None:
 
 
 def classify_failure(error: Exception) -> ProviderFailure:
+    if isinstance(error, ProviderOutputInvalid):
+        return ProviderFailure(502, "Analysis provider returned an invalid response. Try again later.", "invalid_output")
     if isinstance(error, ProviderNotConfigured):
         return ProviderFailure(503, "Analysis is unavailable because the provider is not configured.", "missing_configuration")
     if isinstance(error, (APITimeoutError, TimeoutError)):

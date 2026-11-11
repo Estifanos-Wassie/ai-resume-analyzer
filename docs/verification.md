@@ -69,7 +69,9 @@ The later [offline 404 diagnosis](provider-404-diagnosis.md) corrected overconfi
 404 categorization and added mocked routing/configuration regressions. That
 follow-up suite had 64 passing tests; the 58-test clean-install result above is the
 original historical observation. The subsequent [model migration](model-migration.md)
-adds six mocked regressions for a current total of 70 passing backend tests.
+added six mocked regressions for a historical total of 70 passing backend tests.
+The subsequent [Free-tier budget](free-tier-budget.md) adds eleven backend tests
+for 81 total, plus frontend token-budget error and browser-recovery coverage.
 No further provider API requests were used.
 
 ## CI

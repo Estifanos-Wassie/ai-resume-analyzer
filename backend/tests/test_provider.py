@@ -36,6 +36,7 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.code = "synthetic_error"
         self.headers = {}
         self.raw = json.dumps(VALID_RESULT)
+        self.finish_reason = 'stop'
         self.transport_error = None
         self.requests = []
         self.sdk_options = []
@@ -64,7 +65,7 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 "object": "chat.completion",
                 "created": 0,
                 "model": "openai/gpt-oss-120b",
-                "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": self.raw, "reasoning": 'SYNTHETIC_PRIVATE_REASONING'}}],
+                "choices": [{"index": 0, "finish_reason": self.finish_reason, "message": {"role": "assistant", "content": self.raw, "reasoning": 'SYNTHETIC_PRIVATE_REASONING'}}],
             })
 
         def factory(**kwargs):
@@ -89,7 +90,7 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json(), VALID_RESULT)
         payload = json.loads(self.requests[-1].content)
         self.assertEqual(payload['model'], DEFAULT_GROQ_MODEL)
-        self.assertEqual(payload['max_completion_tokens'], 8192)
+        self.assertEqual(payload['max_completion_tokens'], 2000)
         self.assertNotIn('max_tokens', payload)
         self.assertEqual(payload['reasoning_effort'], 'low')
         self.assertFalse(payload['include_reasoning'])
@@ -118,6 +119,31 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
                 self.status = 404
                 self.assertEqual((await self.analyze(client)).status_code, 503)
         self.assertEqual([json.loads(request.content)['model'] for request in self.requests], ['openai/gpt-oss-20b'] * 2)
+
+    async def test_token_budget_rejection_never_constructs_sdk_or_sends_request(self):
+        with self.assertLogs(operations.logger) as captured:
+            response = await self.analyze(jd='技能😀' * 3000 + PRIVATE_TEXT)
+        self.assertEqual(response.status_code, 413)
+        self.assertIn('Shorten', response.json()['detail'])
+        self.assertEqual(self.sdk_options, [])
+        self.assertEqual(self.requests, [])
+        self.assertNotIn(PRIVATE_TEXT, response.text + str(captured.output))
+
+    async def test_truncation_is_rejected_even_when_content_is_valid_json(self):
+        for reason in ['length', 'content_filter', 'tool_calls']:
+            with self.subTest(reason=reason), self.assertLogs(operations.logger) as captured:
+                self.finish_reason = reason
+                before = len(self.requests)
+                response = await self.analyze()
+                self.assertEqual(response.status_code, 502)
+                self.assertEqual(len(self.requests) - before, 1)
+                self.assertNotIn(PRIVATE_TEXT, response.text + str(captured.output))
+
+    async def test_truncated_json_is_rejected_without_retry(self):
+        self.raw = json.dumps(VALID_RESULT)[:-4]
+        response = await self.analyze()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(len(self.requests), 1)
 
     async def test_structured_mode_still_rejects_bad_provider_content(self):
         for raw in ['', 'not-json', '{"match_score":75}', json.dumps({**VALID_RESULT, 'match_score': True}), json.dumps({**VALID_RESULT, 'strengths': [' ']}), json.dumps({**VALID_RESULT, 'reasoning': 'SYNTHETIC_PRIVATE_REASONING'})]:
