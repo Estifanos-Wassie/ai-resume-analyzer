@@ -1,0 +1,17 @@
+FICTIONAL RESUME - LIVE VERIFICATION DEMO ONLY
+No real person, employment, education or contact details.
+
+PROFILE
+Fictional junior developer building small local web projects.
+
+SKILLS
+Python, FastAPI, React, JavaScript, Git and automated API testing.
+
+FICTIONAL PROJECT
+Study Tasks: built FastAPI CRUD routes and a React task list.
+Added input validation, loading/error states and synthetic API tests.
+Documented local setup and test commands.
+
+LIMITS
+No professional experience or measured business impact is claimed.
+No hands-on SQL, Docker or production deployment experience is claimed.

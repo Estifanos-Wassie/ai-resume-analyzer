@@ -4,7 +4,9 @@
 [offline migration](model-migration.md) replaces the hardcoded model with
 `GROQ_MODEL` (default `openai/gpt-oss-120b`) and forwards it through Compose.
 Statements below describe configuration/evidence at diagnosis time. The original
-account-specific cause is still unproven, and the cumulative live count stays one.
+account-specific cause is still unproven. The live count was one at diagnosis time;
+a later, separately authorized [GPT-OSS live success](live-verification-gptoss.md)
+brings the current cumulative count to two without proving the old 404's cause.
 
 The repository was clean at `3eaf2bf`; the prior README/preferences work and live
 verification were already published. This follow-up made **zero provider API

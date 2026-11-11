@@ -1,0 +1,6 @@
+FICTIONAL JOB DESCRIPTION - LOCAL PORTFOLIO DEMO ONLY
+Junior web developer for a fictional study-task application.
+Required: Python, REST APIs with FastAPI, React/JavaScript, Git,
+input validation and automated API tests. Basic SQL is also required.
+Docker is an optional learning goal. Evaluate the fictional project
+examples only; do not infer employment, degrees or business outcomes.

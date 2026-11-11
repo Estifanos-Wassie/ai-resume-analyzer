@@ -1,5 +1,10 @@
 # Controlled live verification — 2026-11-07
 
+**Historical first attempt.** A later [GPT-OSS live verification](live-verification-gptoss.md)
+on 2026-11-10 succeeded with one separately authorized request. The cumulative
+live-analysis count is now **two**; the first-attempt observations below remain
+unchanged. No further live request is authorized.
+
 The subsequent [configurable model migration](model-migration.md) was verified
 offline only. This record and its screenshots concern the legacy model; they do
 not show a GPT-OSS request or prove the original account-specific 404 cause.

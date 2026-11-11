@@ -12,7 +12,7 @@ prediction of hiring outcomes. There is no independently validated scoring rubri
 **Free-only, local use:** this project must not incur charges. Use only Groq
 Free-tier access; do not upgrade plans, add payment methods, enable paid services,
 use a paid fallback, or provision hosting. Tests use mocks. No additional live
-provider request is currently authorized; the cumulative live-analysis count is one.
+provider request is currently authorized; the cumulative live-analysis count is two.
 
 Before any future authorized live request, confirm the organization and project
 associated with your configured key in the Groq Console. In
@@ -35,16 +35,19 @@ headroom**. Oversized requests receive HTTP 413 asking users to shorten either
 document; nothing is silently truncated or sent. The bundled GPT-OSS tokenizer
 runs offline. See [token accounting and its limits](docs/free-tier-budget.md).
 This is per-request admission, not a remaining/shared quota or billing guarantee.
-Project model permissions, project limits, separate input/output restrictions and
-remaining usage still need console review before any separately authorized live
-request. The application does not enforce or verify the account's billing plan.
+For the latest authorized attempt, the user also confirmed no custom project
+limits or pending GPT-OSS model terms. Reconfirm access, any separate input/output
+restrictions and remaining usage before a future authorized request. The
+application does not enforce or verify the account's billing plan.
 
-**Current live-verification status:** the one authorized synthetic browser request
-used the former `llama-3.3-70b-versatile` model and
-received provider HTTP 404 and a sanitized application HTTP 503. No feedback was
-returned, and no retry was made. Successful live generation remains unverified;
-automated tests use stubs. See the [live verification record](docs/live-verification.md)
-for the exact scope and evidence.
+**Current live-verification status:** one authorized fictional browser submission
+with `openai/gpt-oss-120b` succeeded with HTTP 200, a schema-valid 70% AI estimate,
+and feedback displayed at desktop and mobile sizes. It used exactly one additional
+Groq request, no retries: the cumulative live-analysis count is **two**. The earlier
+legacy-model request failed with provider 404/application 503. See the
+[GPT-OSS live record](docs/live-verification-gptoss.md) and
+[historical failure record](docs/live-verification.md). Automated tests still use
+stubs; one success establishes integration, not scoring accuracy or future quota.
 
 The [offline 404 diagnosis](docs/provider-404-diagnosis.md) found the SDK route
 correct and no observed base-URL override. Groq's official notice retired this
@@ -54,8 +57,8 @@ confirmation of Free status does not establish the original error's exact cause.
 The subsequent
 [offline model migration](docs/model-migration.md) selects the documented
 replacement without claiming that the original account-specific cause was proven.
-No further provider request or account change was made; live generation with the
-replacement is still unverified.
+The migration itself was offline. A later, separately authorized request verified
+generation with the replacement without changing account or billing settings.
 
 ## Stack and project structure
 
@@ -345,7 +348,14 @@ GitHub Actions runs the automated checks without provider credentials.
 
 ## Screenshots
 
-These are **live-attempt error screenshots using synthetic data**, captured from
+These **live success screenshots** show fictional documents and real, validated
+Groq feedback. Both capture the same result by resizing without another submission:
+
+<img src="docs/assets/live-gptoss-fictional-desktop.png" width="540" alt="Desktop view of real Groq feedback for the fictional demo resume, labeled as a 70 percent AI-estimated match">
+<img src="docs/assets/live-gptoss-fictional-mobile.png" width="220" alt="Mobile-width view of the same fictional live result with readable feedback cards">
+
+See the [live record and feedback caveats](docs/live-verification-gptoss.md).
+The following historical **live-attempt error screenshots** were captured from
 the same page at desktop and mobile widths without another submission. They do
 not show successful live feedback. The complete fixture and verification details
 are in the [live record](docs/live-verification.md).
@@ -387,13 +397,15 @@ passed both the checks and container jobs.
 
 ## Known limitations
 
-- The single live attempt failed with provider 404/application 503. The precise
+- The first live attempt failed with provider 404/application 503. The precise
   account-specific cause remains unconfirmed; documented tier retirement is the
   leading explanation. See the [evidence and missing information](docs/provider-404-diagnosis.md).
-  Successful generation, feedback relevance, unsupported candidate
-  claims, quotas, and external retention remain unverified. The model was migrated
-  offline; no additional live request has been made. Scoring accuracy and hiring validity are
-  not established by either automated checks or a future successful example.
+  The later [GPT-OSS live check](docs/live-verification-gptoss.md) verified one
+  successful generation and layout/relevance review. Its “proficient” wording
+  overstates evidence of skill level; suggestions to quantify outcomes require
+  actual measurements. Broader quality, remaining quotas and external retention
+  remain unverified. Scoring accuracy and hiring validity are not established by
+  automated checks or this successful example.
 - PDF support requires extractable text. OCR, password-protected PDFs, and DOCX
   are unsupported. PDF parsing is not separately timeboxed.
 - There is no persistent history, account system, application authentication,

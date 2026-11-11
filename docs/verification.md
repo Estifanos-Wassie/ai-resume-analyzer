@@ -64,6 +64,9 @@ The installed test client emits an existing httpx deprecation warning; tests pas
 Those automated reproducibility checks used no live Groq requests or real resumes.
 A separate [controlled live attempt](live-verification.md) made exactly one Groq
 analysis request and received provider 404/application 503; it produced no feedback.
+Later, the separately authorized [GPT-OSS live check](live-verification-gptoss.md)
+succeeded with one additional request. The cumulative live count is two. Both
+live records are separate from the credential-free automated checks described here.
 
 The later [offline 404 diagnosis](provider-404-diagnosis.md) corrected overconfident
 404 categorization and added mocked routing/configuration regressions. That

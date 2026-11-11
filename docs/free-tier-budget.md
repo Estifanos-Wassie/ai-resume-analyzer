@@ -4,8 +4,10 @@ The user privately confirmed the key-to-console association and Free ($0) status
 with `openai/gpt-oss-120b` limits of 30 requests/minute, 1,000 requests/day,
 8,000 tokens/minute and 200,000 tokens/day. No key suffix, account screenshot,
 credential, or account identifier is recorded here. This is user-supplied console
-evidence, not application or API verification. No new live request is authorized.
-The cumulative live-analysis count remains **one**.
+evidence, not application or API verification. For a later authorized verification,
+the user also confirmed no custom project limits or pending GPT-OSS model terms.
+That [single additional live request](live-verification-gptoss.md) succeeded;
+the cumulative live-analysis count is now **two**, with no further request authorized.
 
 ## Per-request policy
 
@@ -84,7 +86,9 @@ this application continues to use **chat completions**, not Responses.
 There is no organization-wide quota tracker or rate scheduler. Concurrent requests,
 other keys/processes or recent usage can exhaust minute/day allowances despite
 each request passing locally. RPM/RPD/TPD and remaining quota are not guaranteed.
-Exact usage, reasoning/output quality and latency remain unverified live. SDK and
+One subsequent live example reported 979 total tokens (754 prompt, 225 completion,
+including 59 reasoning), versus its local conservative total of 3,107. This does
+not calibrate all inputs or establish future quality, usage or latency. SDK and
 application retries remain zero. Provider 429 maps to sanitized 503 with safe
 Retry-After; recovery is manual after the delay and requires fresh authorization
 for a verification request. Stop when free limits are exhausted or payment is
